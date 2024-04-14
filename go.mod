@@ -1,6 +1,6 @@
 module github.com/evidenceledger/elsignerw
 
-go 1.21.5
+go 1.21
 
 require (
 	github.com/evidenceledger/vcdemo v0.0.0-20240408051456-b9a60be5cfde
