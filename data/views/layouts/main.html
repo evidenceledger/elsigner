@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ if .Title }}{{ .Title }}{{ else }}Signer{{ end }}</title>
+  <!-- <link rel="stylesheet" href="/assets/css/pico.min.css" />
+  <link rel="stylesheet" href="/assets/css/picocolors.css" /> -->
+  <link rel="stylesheet" href="/assets/css/picoindigo.css"/>
+  <style>
+    /* :root {
+        --pico-font-size: 100%;
+    } */
+    button {
+        padding: 10px;
+    }
+    a[role="button"] {
+        padding: 10px;
+    }
+    article>header {
+        background-color: var(--pico-primary-background);
+        color: var(--pico-primary-inverse);
+    }
+  </style>
+</head>
+
+<body>
+  <main class="container">
+
+    {{ template "content" . }}
+
+  </main>
+</body>
+
+</html>

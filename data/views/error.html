@@ -1,0 +1,17 @@
+<div style="max-width:800px;">
+<h1>There has been an error</h1>
+
+<article>
+    <header style="color:white;background-color: red;"><h2 style="color:white;background-color: red;">{{.title}}</h2></header>
+    <p>{{.description}}</p>
+  </article>
+
+{{with .message}}
+ <article>
+    <header><h4>Technical error (for developers):</h4></header>
+    <p>{{.}}</p>
+</article>
+{{end}}
+
+<a role="button" href="/">Home</a>
+</div>

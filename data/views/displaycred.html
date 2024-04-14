@@ -1,0 +1,107 @@
+<h1>LEARCredential to sign</h1>
+
+{{with .credential.CredentialSubject}}
+<div class="grid">
+    {{with .Mandate.Mandator}}
+    <article>
+        <header><b>Mandator</b></header>
+        <form>
+            <label>
+                OrganizationIdentifier
+                <input value="{{.OrganizationIdentifier}}" readonly />
+            </label>
+            <label>
+                Organization
+                <input value="{{.Organization}}" readonly />
+            </label>
+            <label>
+                CommonName
+                <input value="{{.CommonName}}" readonly />
+            </label>
+            <label>
+                EmailAddress
+                <input value="{{.EmailAddress}}" readonly />
+            </label>
+            <label>
+                SerialNumber
+                <input value="{{.SerialNumber}}" readonly />
+            </label>
+            <label>
+                Country
+                <input value="{{.Country}}" readonly />
+            </label>
+
+        </form>
+
+    </article>
+    {{end}}
+
+    {{with .Mandate.Mandatee}}
+    <article>
+        <header><b>Mandatee</b></header>
+        <label>
+            First name
+            <input value="{{.First_name}}" readonly />
+        </label>
+        <label>
+            Last name
+            <input value="{{.Last_name}}" readonly />
+        </label>
+        <label>
+            Email
+            <input value="{{.Email}}" readonly />
+        </label>
+        <label>
+            Mobile phone
+            <input value="{{.Mobile_phone}}" readonly />
+        </label>
+
+    </article>
+    {{end}}
+
+</div>
+
+<div class="grid">
+    {{$total := len .Mandate.Power}}
+    {{range $index, $pow := .Mandate.Power}}
+    <article>
+        <header><b>Power {{add $index 1}} of {{$total}}</b></header>
+        <label>
+            Domain
+            <input value="DOME" readonly />
+        </label>
+        <label>
+            Function
+            <input value="{{$pow.Tmf_function}}" readonly />
+        </label>
+        <label>
+            Allowed actions
+            <input value="{{$pow.Tmf_action}}" readonly />
+        </label>
+
+    </article>
+    {{end}}
+
+</div>
+
+
+{{with .Mandate.LifeSpan}}
+<article>
+    <header><b>Life Span</b></header>
+    <div class="grid">
+        <label>
+            Start date
+            <input value="{{.StartDateTime}}" readonly />
+        </label>
+        <label>
+            End date
+            <input value="{{.EndDateTime}}" readonly />
+        </label>
+    </div>
+</article>
+{{end}}
+
+{{end}}
+
+<a role="button" class="secondary" href="/">Home</a>
+<a role="button" href="/signwithcertificate/{{.credid}}">Sign with certificate</a>

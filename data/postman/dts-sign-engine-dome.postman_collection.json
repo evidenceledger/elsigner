@@ -1,0 +1,90 @@
+{
+	"info": {
+		"_postman_id": "6a216e86-c95b-4ac2-9921-a7b658834f70",
+		"name": "dts-sign-engine-dome",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "3350975",
+		"_collection_link": "https://dts-bc.postman.co/workspace/BC-DTS~c1a0606b-7fa5-4f4f-8205-28926fb09ff9/collection/3350975-6a216e86-c95b-4ac2-9921-a7b658834f70?action=share&source=collection_link&creator=3350975"
+	},
+	"item": [
+		{
+			"name": "HealthCheck",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:80/api/v1/services/signworker/health_check",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "80",
+					"path": [
+						"api",
+						"v1",
+						"services",
+						"signworker",
+						"health_check"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Prometheus",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "https://dts-sign-engine-dome.pre-api.digitelts.com/actuator/prometheus",
+					"protocol": "https",
+					"host": [
+						"dts-sign-engine-dome",
+						"pre-api",
+						"digitelts",
+						"com"
+					],
+					"path": [
+						"actuator",
+						"prometheus"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "JAdES Signer",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n  \"document\": {\r\n    \"type\": [\r\n      \"VerifiableCredential\",\r\n      \"LEARCredential\"\r\n    ],\r\n    \"@context\": [\r\n      \"https://www.w3.org/2018/credentials/v1\",\r\n      \"https://dome-marketplace.eu//2022/credentials/learcredential/v1\"\r\n    ],\r\n    \"id\": \"urn:uuid:34ea5f59-c805-4838-83db-37c9b9dc1494\",\r\n    \"issuer\": {\r\n      \"id\": \"did:key:zQ3shULtGNvEXVezeNALXzKaqGjwhocmYjwDsmUCbdCfEMQyi\"\r\n    },\r\n    \"issuanceDate\": \"2023-09-20T07:22:21Z\",\r\n    \"issued\": \"2023-09-20T07:22:21Z\",\r\n    \"validFrom\": \"2023-09-20T07:22:21Z\",\r\n    \"expirationDate\": \"2023-10-20T07:22:21Z\",\r\n    \"credentialSubject\": {\r\n      \"id\": \"did:key:zDnaew6YNRCf8UEiMpKU6MYoHsFT19dkzS5nviDV9JBhV4gY3\",\r\n      \"title\": \"Mr.\",\r\n      \"first_name\": \"John\",\r\n      \"last_name\": \"Doe\",\r\n      \"gender\": \"M\",\r\n      \"postal_address\": \"\",\r\n      \"email\": \"johndoe@goodair.com\",\r\n      \"telephone\": \"\",\r\n      \"fax\": \"\",\r\n      \"mobile_phone\": \"+34787426623\",\r\n      \"legalRepresentative\": {\r\n        \"cn\": \"56565656V Jesus Ruiz\",\r\n        \"serialNumber\": \"56565656V\",\r\n        \"organizationIdentifier\": \"VATES-12345678\",\r\n        \"o\": \"GoodAir\",\r\n        \"c\": \"ES\"\r\n      },\r\n      \"rolesAndDuties\": [\r\n        {\r\n          \"type\": \"LEARCredential\",\r\n          \"id\": \"https://dome-marketplace.eu//lear/v1/6484994n4r9e990494\"\r\n        }\r\n      ],\r\n      \"key\": \"value\"\r\n    }\r\n  }\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "https://dts-sign-engine-demo.pre-api.digitelts.com/api/v1/services/signworker/signjades",
+					"protocol": "https",
+					"host": [
+						"dts-sign-engine-demo",
+						"pre-api",
+						"digitelts",
+						"com"
+					],
+					"path": [
+						"api",
+						"v1",
+						"services",
+						"signworker",
+						"signjades"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}

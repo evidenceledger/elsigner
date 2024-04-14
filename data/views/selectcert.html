@@ -1,0 +1,29 @@
+<h1>Select x509 certificate</h1>
+<h4>Select the certificate you will use to sign LEARCredentials</h4>
+
+<div class="overflow-auto">
+<table>
+    <thead>
+        <tr>
+            <th scope="col"></th>
+            <th scope="col">Common name</th>
+            <th scope="col">Issuer</th>
+            <th scope="col">Valid until</th>
+        </tr>
+    </thead>
+    <tbody>
+
+        {{range .validcerts}}
+
+        <tr>
+            <td scope="row"><a role="button" href="/selectcertificate/{{.SerialNumber}}">Select</a></td>
+            <td>{{.CommonName}}</td>
+            <td>{{.IssuerCommonName}}</td>
+            <td>{{.NotAfter}}</td>
+        </tr>
+
+        {{end}}
+
+    </tbody>
+</table>
+</div>

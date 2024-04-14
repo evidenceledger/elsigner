@@ -1,0 +1,12 @@
+openapi: '3.0.2'
+info:
+  title: API Title
+  version: '1.0'
+servers:
+  - url: https://dts-sign-engine-demo.pre-api.digitelts.com/api/v1/services/signworker/signjades
+paths:
+  /test:
+    get:
+      responses:
+        '200':
+          description: OK
