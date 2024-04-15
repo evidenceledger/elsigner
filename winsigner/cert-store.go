@@ -1,6 +1,6 @@
 //go:build windows
 
-package signer
+package winsigner
 
 import (
 	"bytes"

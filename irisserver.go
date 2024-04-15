@@ -8,7 +8,8 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/evidenceledger/elsignerw/signer"
+	"github.com/evidenceledger/elsignerw/tokensign"
+	"github.com/evidenceledger/elsignerw/winsigner"
 
 	"github.com/evidenceledger/vcdemo/issuernew"
 	"github.com/golang-jwt/jwt/v5"
@@ -22,7 +23,7 @@ type server struct {
 	app          *iris.Application
 	serialNumber string
 	records      CredentialRecords
-	winSigner    *signer.WindowsSigner
+	winSigner    *winsigner.WindowsSigner
 }
 
 func startIrisServer() {
@@ -83,7 +84,7 @@ func (s *server) selectX509Certificates(ctx iris.Context) {
 		return
 	}
 
-	winSigner, err := signer.New()
+	winSigner, err := winsigner.New()
 	if err != nil {
 		renderPage(ctx, "error", iris.Map{"title": "Error retrieving signing certificates", "description": "There has been an error retrieving certificater from the Windows certification store.", "message": err.Error()})
 		return
@@ -147,6 +148,7 @@ func (s *server) signWithCertificate(ctx iris.Context) {
 		return
 	}
 
+	// Get the raw credential and parse it
 	raw := record["raw"].(string)
 	parser := jwt.NewParser()
 	token, _, err := parser.ParseUnverified(raw, &issuernew.LEARCredentialEmployeeJWTClaims{})
@@ -155,6 +157,7 @@ func (s *server) signWithCertificate(ctx iris.Context) {
 		return
 	}
 
+	// Sign the credential with the certificate selected previously
 	learCred := token.Claims.(*issuernew.LEARCredentialEmployeeJWTClaims)
 	tok, err := s.signLEARCredential(serialNumber, learCred.LEARCredentialEmployee)
 	if err != nil {
@@ -162,7 +165,7 @@ func (s *server) signWithCertificate(ctx iris.Context) {
 		return
 	}
 
-	// Update the record in the server
+	// Prepare to update the record in the server
 	record["raw"] = tok
 	record["status"] = "signed"
 
@@ -172,11 +175,20 @@ func (s *server) signWithCertificate(ctx iris.Context) {
 		renderPage(ctx, "error", iris.Map{"title": "Error with the format of the credential", "description": "There has been an error serialising the LEARCredential to prepare for signature.", "message": err.Error()})
 		return
 	}
-
 	buf := bytes.NewBuffer(serialised)
 
+	client := http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				GetClientCertificate: s.winSigner.GetClientCertificate,
+				MinVersion:           tls.VersionTLS13,
+				MaxVersion:           tls.VersionTLS13,
+			},
+		},
+	}
+
 	// Send the signed credential back to the server
-	resp, err := http.Post("https://issuer.mycredential.eu/apiuser/updatesignedcredential", "application/json", buf)
+	resp, err := client.Post("https://issuersec.mycredential.eu/apiadmin/updatesignedcredential", "application/json", buf)
 	if err != nil {
 		renderPage(ctx, "error", iris.Map{"title": "Error ending signed credential to server", "description": "There has been an error when trying to update the signed credential in the Issuer server.", "message": err.Error()})
 		return
@@ -208,7 +220,7 @@ func (s *server) retrieveCredentialsToSign() (CredentialRecords, error) {
 	var recordArray []CredentialRecord
 	records := CredentialRecords{}
 
-	url := "https://issuersec.mycredential.eu/apiuser/retrievecredentials"
+	url := "https://issuersec.mycredential.eu/apiadmin/retrievecredentials"
 
 	client := http.Client{
 		Transport: &http.Transport{
@@ -250,4 +262,21 @@ func (s *server) retrieveCredentialsToSign() (CredentialRecords, error) {
 	}
 
 	return records, nil
+}
+
+func (s *server) signLEARCredential(serialNumber string, learCred issuernew.LEARCredentialEmployee) (string, error) {
+
+	tlsCertificate, err := s.winSigner.GetTLSCertificate(serialNumber)
+	if err != nil {
+		return "", err
+	}
+
+	signer := tlsCertificate.PrivateKey
+	// Sign the credential
+	tok, err := issuernew.CreateLEARCredentialJWTtoken(learCred, tokensign.SigningMethodCert, signer)
+	if err != nil {
+		return "", err
+	}
+
+	return tok, nil
 }
