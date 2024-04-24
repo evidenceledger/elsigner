@@ -14,10 +14,10 @@ func main() {
 	// The Windows certstore is only available on Windows (obviously!)
 	currentOS := runtime.GOOS
 
-	if currentOS != "windows" {
-		fmt.Println("This program only works in Windows")
-		return
-	}
+	// if currentOS != "windows" {
+	// 	fmt.Println("This program only works in Windows")
+	// 	return
+	// }
 
 	if currentOS == "windows" {
 		validCerts, err := certstore.RetrieveValidCertsFromWindows()

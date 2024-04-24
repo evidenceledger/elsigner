@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"runtime"
 
 	"github.com/evidenceledger/elsignerw/certstore"
 	"github.com/evidenceledger/elsignerw/tokensign"
@@ -13,6 +14,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/kataras/iris/v12"
 	"github.com/kataras/iris/v12/view"
+	"software.sslmate.com/src/go-pkcs12"
 )
 
 type CredentialRecord map[string]any
@@ -59,6 +61,8 @@ func startIrisServer() {
 
 	app.Get("/selectcertificate/{serial}", s.selectX509Certificates)
 
+	app.Post("/selectfilecertificate", s.selectFileCertificate)
+
 	// Display the credential details so the user knows what is being signed
 	app.Get("/displaycred/{id}", s.displayCredentialDetails)
 
@@ -70,10 +74,50 @@ func startIrisServer() {
 
 func (s *server) homePage(ctx iris.Context) {
 	if len(s.serialNumber) == 0 {
-		s.selectX509Certificates(ctx)
+		renderPage(ctx, "select_cert_location", iris.Map{"os": runtime.GOOS})
+
+		// s.selectX509Certificates(ctx)
 	} else {
 		s.displayLEARCredentials(ctx)
 	}
+}
+
+func (s *server) selectFileCertificate(ctx iris.Context) {
+
+	file, fileHeader, err := ctx.FormFile("file")
+	if err != nil {
+		ctx.StopWithError(iris.StatusBadRequest, err)
+		return
+	}
+	fmt.Println(file)
+	fmt.Println(fileHeader)
+
+	buf := make([]byte, fileHeader.Size)
+	n, err := file.Read(buf)
+	if err != nil {
+		ctx.StopWithError(iris.StatusBadRequest, err)
+		return
+	}
+	fmt.Println(n)
+
+	privateKey, certificate, _, err := pkcs12.DecodeChain(buf, "AQueNoLoAdivinasCerdo01_")
+	if err != nil {
+		ctx.StopWithError(iris.StatusBadRequest, err)
+		return
+	}
+	fmt.Println(privateKey, certificate)
+
+	serialNumber := ctx.Params().Get("serial")
+	if len(serialNumber) > 0 {
+		fmt.Println("selectedX509Certificate", serialNumber)
+		s.serialNumber = serialNumber
+		s.certSigner.DefaultCertSerialNumber = serialNumber
+		s.displayLEARCredentials(ctx)
+		return
+	}
+
+	renderPage(ctx, "selectcert", iris.Map{"validcerts": ""})
+
 }
 
 func (s *server) selectX509Certificates(ctx iris.Context) {

@@ -1,0 +1,29 @@
+<h1>Select certificate location</h1>
+
+<p>You have to select an eIDAS certificate to sign</p>
+
+<div class="grid">
+    {{if eq .os "windows"}}
+    <article>
+        <header><b>Select from certstore</b></header>
+        <a role="button" href="/selectcertificate">Select from certstore</a>
+
+    </article>
+    {{end}}
+
+    <article>
+        <header><b>Select from file</b></header>
+        <form action="/selectfilecertificate" method="post" enctype="multipart/form-data">
+            <label>
+                First name
+                <input type="file" name="file"/>
+            </label>
+            <input
+            type="submit"
+            value="Select"
+          />
+        </form>
+    </article>
+
+</div>
+
