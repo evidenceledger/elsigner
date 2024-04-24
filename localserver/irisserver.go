@@ -17,6 +17,8 @@ import (
 	"software.sslmate.com/src/go-pkcs12"
 )
 
+const supportedAlgorithm = tls.PSSWithSHA256
+
 type CredentialRecord map[string]any
 type CredentialRecords map[string]CredentialRecord
 
@@ -25,10 +27,11 @@ func StartIrisServer() {
 }
 
 type server struct {
-	app          *iris.Application
-	serialNumber string
-	records      CredentialRecords
-	certSigner   *certstore.CertStoreSigner
+	app            *iris.Application
+	serialNumber   string
+	records        CredentialRecords
+	certSigner     *certstore.CertStoreSigner
+	tlsCertificate *tls.Certificate
 }
 
 func startIrisServer() {
@@ -59,7 +62,7 @@ func startIrisServer() {
 	// The main page of the application
 	app.Get("/", s.homePage)
 
-	app.Get("/selectcertificate/{serial}", s.selectX509Certificates)
+	app.Get("/selectcertificate", s.selectX509Certificates)
 
 	app.Post("/selectfilecertificate", s.selectFileCertificate)
 
@@ -107,6 +110,12 @@ func (s *server) selectFileCertificate(ctx iris.Context) {
 	}
 	fmt.Println(privateKey, certificate)
 
+	s.tlsCertificate = &tls.Certificate{
+		Certificate:                  [][]byte{certificate.Raw},
+		PrivateKey:                   privateKey,
+		SupportedSignatureAlgorithms: []tls.SignatureScheme{tls.PSSWithSHA256},
+	}
+
 	serialNumber := ctx.Params().Get("serial")
 	if len(serialNumber) > 0 {
 		fmt.Println("selectedX509Certificate", serialNumber)
@@ -122,7 +131,8 @@ func (s *server) selectFileCertificate(ctx iris.Context) {
 
 func (s *server) selectX509Certificates(ctx iris.Context) {
 
-	serialNumber := ctx.Params().Get("serial")
+	serialNumber := ctx.URLParam("serial")
+
 	if len(serialNumber) > 0 {
 		fmt.Println("selectedX509Certificate", serialNumber)
 		s.serialNumber = serialNumber

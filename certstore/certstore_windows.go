@@ -19,10 +19,9 @@ const (
 	CRYPT_E_NOT_FOUND = 0x80092004
 	// TLS cipher suites: https://www.rfc-editor.org/rfc/rfc8446.html#section-9.1
 	supportedAlgorithm = tls.PSSWithSHA256
-	// commonName         = "RUIZ MARTINEZ JESUS - 21442837Y"
-	windowsStoreName = "MY"
-	nCryptSilentFlag = 0x00000040 // ncrypt.h NCRYPT_SILENT_FLAG
-	bCryptPadPss     = 0x00000008 // bcrypt.h BCRYPT_PAD_PSS
+	windowsStoreName   = "MY"
+	nCryptSilentFlag   = 0x00000040 // ncrypt.h NCRYPT_SILENT_FLAG
+	bCryptPadPss       = 0x00000008 // bcrypt.h BCRYPT_PAD_PSS
 )
 
 var (

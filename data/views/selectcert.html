@@ -16,7 +16,7 @@
         {{range .validcerts}}
 
         <tr>
-            <td scope="row"><a role="button" href="/selectcertificate/{{.SerialNumber}}">Select</a></td>
+            <td scope="row"><a role="button" href="/selectcertificate?serial={{.SerialNumber}}">Select</a></td>
             <td>{{.CommonName}}</td>
             <td>{{.IssuerCommonName}}</td>
             <td>{{.NotAfter}}</td>
