@@ -1,4 +1,4 @@
-package filesigner
+package filestore
 
 import (
 	"bytes"

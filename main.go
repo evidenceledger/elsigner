@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"runtime"
 
-	"github.com/evidenceledger/elsignerw/winsigner"
+	"github.com/evidenceledger/elsignerw/certstore"
+	"github.com/evidenceledger/elsignerw/localserver"
 )
 
 func main() {
@@ -19,7 +20,7 @@ func main() {
 	}
 
 	if currentOS == "windows" {
-		validCerts, err := winsigner.RetrieveValidCertsFromWindows()
+		validCerts, err := certstore.RetrieveValidCertsFromWindows()
 		if err != nil {
 			panic(err)
 		}
@@ -33,5 +34,5 @@ func main() {
 		}
 	}
 
-	startIrisServer()
+	localserver.StartIrisServer()
 }
