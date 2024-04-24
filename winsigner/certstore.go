@@ -22,10 +22,9 @@ const (
 	CRYPT_E_NOT_FOUND = 0x80092004
 	// TLS cipher suites: https://www.rfc-editor.org/rfc/rfc8446.html#section-9.1
 	supportedAlgorithm = tls.PSSWithSHA256
-	// commonName         = "RUIZ MARTINEZ JESUS - 21442837Y"
-	windowsStoreName = "MY"
-	nCryptSilentFlag = 0x00000040 // ncrypt.h NCRYPT_SILENT_FLAG
-	bCryptPadPss     = 0x00000008 // bcrypt.h BCRYPT_PAD_PSS
+	windowsStoreName   = "MY"
+	nCryptSilentFlag   = 0x00000040 // ncrypt.h NCRYPT_SILENT_FLAG
+	bCryptPadPss       = 0x00000008 // bcrypt.h BCRYPT_PAD_PSS
 )
 
 var (
@@ -185,7 +184,6 @@ func RetrieveValidCertsFromWindows() (map[string]CertInfo, error) {
 		if err != nil {
 			return nil, err
 		}
-		fmt.Printf("%s - %v\n", foundCert.Subject.CommonName, foundCert.NotAfter)
 		if now.After(foundCert.NotBefore) && now.Before(foundCert.NotAfter) && (foundCert.KeyUsage&x509.KeyUsageDigitalSignature) > 0 {
 			fmt.Printf("FOUND!! %s - %v\n", foundCert.Subject.CommonName, foundCert.NotAfter)
 			cert := CertInfo{
@@ -215,97 +213,6 @@ func (ws *WindowsSigner) GetClientCertificate(info *tls.CertificateRequestInfo) 
 
 	return ws.GetTLSCertificate(serialNumber)
 
-	// // Validate the supported signature schemes.
-	// signatureSchemeSupported := false
-	// for _, scheme := range info.SignatureSchemes {
-	// 	if scheme == supportedAlgorithm {
-	// 		signatureSchemeSupported = true
-	// 		break
-	// 	}
-	// }
-	// if !signatureSchemeSupported {
-	// 	return nil, fmt.Errorf("unsupported signature scheme")
-	// }
-
-	// // Open the certificate store
-	// storePtr, err := windows.UTF16PtrFromString(windowsStoreName)
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// store, err := windows.CertOpenStore(
-	// 	windows.CERT_STORE_PROV_SYSTEM,
-	// 	0,
-	// 	uintptr(0),
-	// 	windows.CERT_SYSTEM_STORE_CURRENT_USER,
-	// 	uintptr(unsafe.Pointer(storePtr)),
-	// )
-	// if err != nil {
-	// 	return nil, err
-	// }
-
-	// // Find the certificate
-	// var certContext *windows.CertContext
-
-	// now := time.Now()
-
-	// for {
-	// 	certContext, err = windows.CertEnumCertificatesInStore(store, certContext)
-	// 	if err != nil {
-	// 		if errno, ok := err.(windows.Errno); ok {
-	// 			if errno == CRYPT_E_NOT_FOUND {
-	// 				break
-	// 			}
-	// 		}
-	// 		fmt.Println(windows.GetLastError())
-	// 	}
-	// 	if certContext == nil {
-	// 		break
-	// 	}
-
-	// 	// Copy the certificate data so that we have our own copy outside the windows context
-	// 	encodedCert := unsafe.Slice(certContext.EncodedCert, certContext.Length)
-	// 	buf := bytes.Clone(encodedCert)
-	// 	foundCert, err := x509.ParseCertificate(buf)
-	// 	if err != nil {
-	// 		return nil, err
-	// 	}
-	// 	fmt.Printf("%s - %v\n", foundCert.Subject.CommonName, foundCert.NotAfter)
-	// 	if now.Before(foundCert.NotAfter) && foundCert.Subject.CommonName == commonName {
-	// 		fmt.Printf("FOUND!! %s - %v\n", foundCert.Subject.CommonName, foundCert.NotAfter)
-	// 		break
-	// 	}
-
-	// }
-
-	// customSigner := &CustomSigner{
-	// 	store:              store,
-	// 	windowsCertContext: certContext,
-	// }
-	// // Set a finalizer to release Windows resources when the CustomSigner is garbage collected.
-	// runtime.SetFinalizer(
-	// 	customSigner, func(c *CustomSigner) {
-	// 		_ = windows.CertFreeCertificateContext(c.windowsCertContext)
-	// 		_ = windows.CertCloseStore(c.store, 0)
-	// 	},
-	// )
-
-	// // Copy the certificate data so that we have our own copy outside the windows context
-	// encodedCert := unsafe.Slice(certContext.EncodedCert, certContext.Length)
-	// buf := bytes.Clone(encodedCert)
-	// foundCert, err := x509.ParseCertificate(buf)
-	// if err != nil {
-	// 	return nil, err
-	// }
-
-	// customSigner.x509Cert = foundCert
-
-	// certificate := tls.Certificate{
-	// 	Certificate:                  [][]byte{foundCert.Raw},
-	// 	PrivateKey:                   customSigner,
-	// 	SupportedSignatureAlgorithms: []tls.SignatureScheme{supportedAlgorithm},
-	// }
-	// fmt.Printf("Found certificate with common name %s\n", foundCert.Subject.CommonName)
-	// return &certificate, nil
 }
 
 // CustomSigner is a crypto.Signer that uses the client certificate and key to sign

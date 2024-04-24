@@ -102,6 +102,7 @@ require (
 	github.com/multiformats/go-multibase v0.1.1 // indirect
 	github.com/multiformats/go-multicodec v0.9.0 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
+	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pocketbase/dbx v1.10.1 // indirect
 	github.com/pocketbase/pocketbase v0.22.4 // indirect

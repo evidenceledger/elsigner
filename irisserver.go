@@ -3,13 +3,17 @@ package main
 import (
 	"bytes"
 	"crypto/tls"
+	"embed"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"time"
 
 	"github.com/evidenceledger/elsignerw/tokensign"
 	"github.com/evidenceledger/elsignerw/winsigner"
+	"github.com/pkg/browser"
 
 	"github.com/evidenceledger/vcdemo/issuernew"
 	"github.com/golang-jwt/jwt/v5"
@@ -26,13 +30,28 @@ type server struct {
 	winSigner    *winsigner.WindowsSigner
 }
 
-func startIrisServer() {
+//go:embed data/*
+var embeddedFS embed.FS
+
+func startIrisServer(debug bool) {
 
 	// Load view templates
-	tmpl := view.Blocks("./data", ".html").
-		RootDir("views").
-		Reload(true).
-		LayoutDir("layouts").Layout("main")
+	var tmpl *view.BlocksEngine
+	if _, err := os.Stat("./data"); !os.IsNotExist(err) {
+		fmt.Println("Using external templates")
+		tmpl = view.Blocks("./data", ".html").
+			RootDir("views").
+			Reload(true).
+			LayoutDir("layouts").Layout("main")
+
+	} else {
+		fmt.Println("Using embedded templates")
+		tmpl = view.Blocks(embeddedFS, ".html").
+			RootDir("data/views").
+			Reload(true).
+			LayoutDir("layouts").Layout("main")
+
+	}
 
 	// Add our functions for the template
 	tmpl.AddFunc("add", func(a, b int) int {
@@ -62,7 +81,15 @@ func startIrisServer() {
 	// Perform the actual signature and display the result to the user
 	app.Get("/signwithcertificate/{id}", s.signWithCertificate)
 
+	// Close the server and exit
+	app.Get("/stop", s.stopServer)
+
+	go func() {
+		time.Sleep(2 * time.Second)
+		browser.OpenURL("http://localhost:8080/")
+	}()
 	app.Listen("localhost:8080")
+
 }
 
 func (s *server) homePage(ctx iris.Context) {
@@ -71,6 +98,14 @@ func (s *server) homePage(ctx iris.Context) {
 	} else {
 		s.displayLEARCredentials(ctx)
 	}
+}
+
+func (s *server) stopServer(ctx iris.Context) {
+	go func() {
+		time.Sleep(time.Second)
+		os.Exit(0)
+	}()
+	renderPage(ctx, "stopped", nil)
 }
 
 func (s *server) selectX509Certificates(ctx iris.Context) {
@@ -188,7 +223,7 @@ func (s *server) signWithCertificate(ctx iris.Context) {
 	}
 
 	// Send the signed credential back to the server
-	resp, err := client.Post("https://issuersec.mycredential.eu/apiadmin/updatesignedcredential", "application/json", buf)
+	resp, err := client.Post("https://issuersec.mycredential.eu/apisigner/updatesignedcredential", "application/json", buf)
 	if err != nil {
 		renderPage(ctx, "error", iris.Map{"title": "Error ending signed credential to server", "description": "There has been an error when trying to update the signed credential in the Issuer server.", "message": err.Error()})
 		return
@@ -220,7 +255,7 @@ func (s *server) retrieveCredentialsToSign() (CredentialRecords, error) {
 	var recordArray []CredentialRecord
 	records := CredentialRecords{}
 
-	url := "https://issuersec.mycredential.eu/apiadmin/retrievecredentials"
+	url := "https://issuersec.mycredential.eu/apisigner/retrievecredentials"
 
 	client := http.Client{
 		Transport: &http.Transport{
