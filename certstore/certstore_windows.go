@@ -1,6 +1,4 @@
-//go:build windows
-
-package winsigner
+package certstore
 
 import (
 	"bytes"
@@ -10,8 +8,6 @@ import (
 	"crypto/x509"
 	"fmt"
 	"io"
-	"math/big"
-	"runtime"
 	"time"
 	"unsafe"
 
@@ -32,115 +28,21 @@ var (
 	nCryptSignHash = nCrypt.MustFindProc("NCryptSignHash")
 )
 
-type CertInfo struct {
-	CommonName       string
-	IssuerCommonName string
-	KeyUsage         int
-	NotAfter         string
-	SerialNumber     *big.Int
-}
-
-type WindowsSigner struct {
-	ValidCerts              map[string]CertInfo
-	DefaultCertSerialNumber string
-	DefaultSigner           *CustomSigner
-}
-
-func New() (*WindowsSigner, error) {
-	validCerts, err := RetrieveValidCertsFromWindows()
+// New connects to the Windows certstore, retrieves all valid certificates and returns them to the caller
+func New() (*CertStore, error) {
+	var err error
+	ws := &CertStore{}
+	ws.ValidCerts, err = ws.RetrieveValidCertsFromWindows()
 	if err != nil {
 		return nil, err
 	}
-
-	ws := &WindowsSigner{}
-	ws.ValidCerts = validCerts
 
 	return ws, nil
 }
 
-func (ws *WindowsSigner) GetTLSCertificate(serialNumber string) (*tls.Certificate, error) {
+func (ws *CertStore) RetrieveValidCertsFromWindows() (map[string]CertInfo, error) {
 
-	// Open the certificate store
-	storePtr, err := windows.UTF16PtrFromString(windowsStoreName)
-	if err != nil {
-		return nil, err
-	}
-	store, err := windows.CertOpenStore(
-		windows.CERT_STORE_PROV_SYSTEM,
-		0,
-		uintptr(0),
-		windows.CERT_SYSTEM_STORE_CURRENT_USER,
-		uintptr(unsafe.Pointer(storePtr)),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	var certContext *windows.CertContext
-	for {
-		certContext, err = windows.CertEnumCertificatesInStore(store, certContext)
-		if err != nil {
-			if errno, ok := err.(windows.Errno); ok {
-				if errno == CRYPT_E_NOT_FOUND {
-					break
-				}
-			}
-			fmt.Println(windows.GetLastError())
-		}
-		if certContext == nil {
-			break
-		}
-
-		// Copy the certificate data so that we have our own copy outside the windows context
-		encodedCert := unsafe.Slice(certContext.EncodedCert, certContext.Length)
-		buf := bytes.Clone(encodedCert)
-		foundCert, err := x509.ParseCertificate(buf)
-		if err != nil {
-			return nil, err
-		}
-		fmt.Printf("%s - %v\n", foundCert.Subject.CommonName, foundCert.NotAfter)
-		if foundCert.SerialNumber.String() == serialNumber {
-			fmt.Printf("FOUND!! %s - %v\n", foundCert.Subject.CommonName, foundCert.NotAfter)
-			break
-		}
-
-	}
-
-	customSigner := &CustomSigner{
-		store:              store,
-		windowsCertContext: certContext,
-	}
-	// Set a finalizer to release Windows resources when the CustomSigner is garbage collected.
-	runtime.SetFinalizer(
-		customSigner, func(c *CustomSigner) {
-			_ = windows.CertFreeCertificateContext(c.windowsCertContext)
-			_ = windows.CertCloseStore(c.store, 0)
-		},
-	)
-
-	// Copy the certificate data so that we have our own copy outside the windows context
-	encodedCert := unsafe.Slice(certContext.EncodedCert, certContext.Length)
-	buf := bytes.Clone(encodedCert)
-	foundCert, err := x509.ParseCertificate(buf)
-	if err != nil {
-		return nil, err
-	}
-
-	customSigner.x509Cert = foundCert
-
-	certificate := tls.Certificate{
-		Certificate:                  [][]byte{foundCert.Raw},
-		PrivateKey:                   customSigner,
-		SupportedSignatureAlgorithms: []tls.SignatureScheme{supportedAlgorithm},
-	}
-	fmt.Printf("Found certificate with common name %s\n", foundCert.Subject.CommonName)
-	return &certificate, nil
-
-}
-
-func RetrieveValidCertsFromWindows() (map[string]CertInfo, error) {
-
-	// Open the certificate store
+	// Open the MY certificate store for the current user
 	storePtr, err := windows.UTF16PtrFromString(windowsStoreName)
 	if err != nil {
 		return nil, err
@@ -159,8 +61,7 @@ func RetrieveValidCertsFromWindows() (map[string]CertInfo, error) {
 	// Get the current time to check for validity of the certificates
 	now := time.Now()
 
-	// Select valid certificates
-
+	// Iterate through all certificates in the Windows certstore, selection the ones we want
 	validCerts := map[string]CertInfo{}
 	var certContext *windows.CertContext
 	for {
@@ -177,24 +78,40 @@ func RetrieveValidCertsFromWindows() (map[string]CertInfo, error) {
 			break
 		}
 
-		// Copy the certificate data so that we have our own copy outside the windows context
-		encodedCert := unsafe.Slice(certContext.EncodedCert, certContext.Length)
-		buf := bytes.Clone(encodedCert)
-		foundCert, err := x509.ParseCertificate(buf)
+		// Create a local copy (ouside of the Windows certstore) of the certificate
+		thisEncodedCert := unsafe.Slice(certContext.EncodedCert, certContext.Length)
+		buf := bytes.Clone(thisEncodedCert)
+		thisX509Cert, err := x509.ParseCertificate(buf)
 		if err != nil {
 			return nil, err
 		}
-		if now.After(foundCert.NotBefore) && now.Before(foundCert.NotAfter) && (foundCert.KeyUsage&x509.KeyUsageDigitalSignature) > 0 {
-			fmt.Printf("FOUND!! %s - %v\n", foundCert.Subject.CommonName, foundCert.NotAfter)
-			cert := CertInfo{
-				CommonName:       foundCert.Subject.CommonName,
-				IssuerCommonName: foundCert.Issuer.CommonName,
-				KeyUsage:         int(foundCert.KeyUsage),
-				NotAfter:         foundCert.NotAfter.Format("2006-01-02"),
-				SerialNumber:     foundCert.SerialNumber,
+
+		// We are interested in not expired certificates (and those that can be used now, so we check for the NotBefore date).
+		// And also only in the ones which can be used for signing
+		if now.After(thisX509Cert.NotBefore) && now.Before(thisX509Cert.NotAfter) && (thisX509Cert.KeyUsage&x509.KeyUsageDigitalSignature) > 0 {
+			fmt.Printf("FOUND!! %s - %v\n", thisX509Cert.Subject.CommonName, thisX509Cert.NotAfter)
+			certInfo := CertInfo{
+				Certificate:      thisX509Cert,
+				CommonName:       thisX509Cert.Subject.CommonName,
+				IssuerCommonName: thisX509Cert.Issuer.CommonName,
+				KeyUsage:         int(thisX509Cert.KeyUsage),
+				NotAfter:         thisX509Cert.NotAfter.Format("2006-01-02"),
+				SerialNumber:     thisX509Cert.SerialNumber,
 			}
 
-			validCerts[foundCert.SerialNumber.String()] = cert
+			// Duplicate the Windows certificate context, because it would be freed while iterating the certstore
+			dupContext := windows.CertDuplicateCertificateContext(certContext)
+
+			// Create a custom crypto.Signer which is a wrapper to the private key inside the certstore.
+			// We do not really have the private key in our program memory, but instead the signature will be
+			// performed inside the certstore
+			customSigner := &CustomSigner{
+				windowsCertContext: dupContext,
+				x509Cert:           thisX509Cert,
+			}
+			certInfo.PrivateKey = customSigner
+
+			validCerts[thisX509Cert.SerialNumber.String()] = certInfo
 		}
 
 	}
@@ -202,22 +119,34 @@ func RetrieveValidCertsFromWindows() (map[string]CertInfo, error) {
 	return validCerts, nil
 }
 
-func (ws *WindowsSigner) GetClientCertificate(info *tls.CertificateRequestInfo) (*tls.Certificate, error) {
+// GetClientCertificate is called by the TLS handshake process, to get a certificate to authenticate to the server
+func (ws *CertStore) GetClientCertificate(info *tls.CertificateRequestInfo) (*tls.Certificate, error) {
 	fmt.Printf("Server requested certificate\n")
 
-	serialNumber := ws.DefaultCertSerialNumber
+	serialNumber := ws.SelectedSerialNumber
 	if len(serialNumber) == 0 {
 		return nil, fmt.Errorf("defaultCertSerialNumber not set")
 	}
 	fmt.Println("GetClientCertificate: serialNumber", serialNumber)
 
-	return ws.GetTLSCertificate(serialNumber)
+	certInfo, ok := ws.ValidCerts[serialNumber]
+	if !ok {
+		return nil, fmt.Errorf("certificate not found")
+	}
+
+	certificate := &tls.Certificate{
+		Certificate:                  [][]byte{certInfo.Certificate.Raw},
+		PrivateKey:                   certInfo.PrivateKey,
+		SupportedSignatureAlgorithms: []tls.SignatureScheme{supportedAlgorithm},
+	}
+
+	return certificate, nil
 
 }
 
 // CustomSigner is a crypto.Signer that uses the client certificate and key to sign
 type CustomSigner struct {
-	store              windows.Handle
+	// store              windows.Handle
 	windowsCertContext *windows.CertContext
 	x509Cert           *x509.Certificate
 }

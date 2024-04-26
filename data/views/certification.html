@@ -1,0 +1,147 @@
+<h1>Certification to sign</h1>
+
+{{.msg}}
+
+<form action="/formcreatecertification" method="post">
+
+{{with .certification.CredentialSubject}}
+    <article>
+        <header><b>General</b></header>
+        <div class="grid">
+            <label>
+                Service specification
+                <input value="{{.ServiceSpec}}" name="service_spec" />
+            </label>
+            <label>
+                ServiceSpec version
+                <input value="{{.ServiceSpecVersion}}" name="service_spec_version" />
+            </label>
+        </div>
+    </article>
+
+    {{with .Accreditation}}
+    <div class="grid">
+        <article>
+            <header><b>Accreditation</b></header>
+            <div class="grid">
+
+                <label>
+                    Type
+
+                    <select name="type" aria-label="Select type of certification..." required>
+                        <option selected disabled value="">
+                            Select type of certification...
+                        </option>
+                        <option>ISO/IEC 27001</option>
+                        <option>SOC2</option>
+                        <option>ISO/IEC 27017</option>
+                        <option>ISO/IEC 27018</option>
+                        <option>PCI DSS</option>
+                    </select>
+
+                </label>
+                <label>
+                    Scope
+                    <input value="{{.Scope}}" name="scope" />
+                </label>
+            </div>
+
+            <div class="grid">
+
+                <label>
+                    Valid From
+                    <input type="date" name="validFrom" aria-label="Date" />
+                </label>
+                <label>
+                    Valid Until
+                
+                    <input type="date" name="validUntil" aria-label="Date" />
+
+                </label>
+            </div>
+        </article>
+    </div>
+    {{end}}
+
+
+    <div class="grid">
+
+        {{with .Issuer}}
+        <article>
+            <header><b>Issuer</b></header>
+                <label>
+                    OrganizationIdentifier
+                    <input value="{{.OrganizationIdentifier}}" readonly />
+                </label>
+                <label>
+                    Organization
+                    <input value="{{.Organization}}" readonly />
+                </label>
+                <label>
+                    Web site
+                    <input value="{{.Website}}" />
+                </label>
+                <label>
+                    CommonName
+                    <input value="{{.CommonName}}" readonly />
+                </label>
+                <label>
+                    EmailAddress
+                    <input value="{{.EmailAddress}}" />
+                </label>
+                <label>
+                    SerialNumber
+                    <input value="{{.SerialNumber}}" readonly />
+                </label>
+                <label>
+                    Country
+                    <input value="{{.Country}}" readonly />
+                </label>
+
+
+        </article>
+        {{end}}
+
+        {{with .Provider}}
+        <article>
+            <header><b>Provider</b></header>
+                <label>
+                    OrganizationIdentifier
+                    <input value="{{.OrganizationIdentifier}}" />
+                </label>
+                <label>
+                    Organization
+                    <input value="{{.Organization}}" />
+                </label>
+                <label>
+                    Web site
+                    <input value="{{.Website}}" />
+                </label>
+                <label>
+                    CommonName
+                    <input value="{{.CommonName}}" />
+                </label>
+                <label>
+                    EmailAddress
+                    <input value="{{.EmailAddress}}" />
+                </label>
+                <label>
+                    SerialNumber
+                    <input value="{{.SerialNumber}}" />
+                </label>
+                <label>
+                    Country
+                    <input value="{{.Country}}" />
+                </label>
+
+        </article>
+        {{end}}
+
+    </div>
+
+{{end}}
+
+<input type="submit" />
+
+</form>
+
