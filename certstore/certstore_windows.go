@@ -105,7 +105,7 @@ func (ws *CertStore) RetrieveValidCertsFromWindows() (map[string]CertInfo, error
 			// Create a custom crypto.Signer which is a wrapper to the private key inside the certstore.
 			// We do not really have the private key in our program memory, but instead the signature will be
 			// performed inside the certstore
-			customSigner := &CustomSigner{
+			customSigner := &WindowsCertstoreSigner{
 				windowsCertContext: dupContext,
 				x509Cert:           thisX509Cert,
 			}
@@ -119,43 +119,17 @@ func (ws *CertStore) RetrieveValidCertsFromWindows() (map[string]CertInfo, error
 	return validCerts, nil
 }
 
-// GetClientCertificate is called by the TLS handshake process, to get a certificate to authenticate to the server
-func (ws *CertStore) GetClientCertificate(info *tls.CertificateRequestInfo) (*tls.Certificate, error) {
-	fmt.Printf("Server requested certificate\n")
-
-	serialNumber := ws.SelectedSerialNumber
-	if len(serialNumber) == 0 {
-		return nil, fmt.Errorf("defaultCertSerialNumber not set")
-	}
-	fmt.Println("GetClientCertificate: serialNumber", serialNumber)
-
-	certInfo, ok := ws.ValidCerts[serialNumber]
-	if !ok {
-		return nil, fmt.Errorf("certificate not found")
-	}
-
-	certificate := &tls.Certificate{
-		Certificate:                  [][]byte{certInfo.Certificate.Raw},
-		PrivateKey:                   certInfo.PrivateKey,
-		SupportedSignatureAlgorithms: []tls.SignatureScheme{supportedAlgorithm},
-	}
-
-	return certificate, nil
-
-}
-
-// CustomSigner is a crypto.Signer that uses the client certificate and key to sign
-type CustomSigner struct {
-	// store              windows.Handle
+// WindowsCertstoreSigner is a crypto.Signer that wraps the Windows Certificate Store private keys to enable signatures
+type WindowsCertstoreSigner struct {
 	windowsCertContext *windows.CertContext
 	x509Cert           *x509.Certificate
 }
 
-func (k *CustomSigner) Public() crypto.PublicKey {
+func (k *WindowsCertstoreSigner) Public() crypto.PublicKey {
 	return k.x509Cert.PublicKey
 }
 
-func (k *CustomSigner) Sign(_ io.Reader, digest []byte, opts crypto.SignerOpts) (signature []byte, err error) {
+func (k *WindowsCertstoreSigner) Sign(_ io.Reader, digest []byte, opts crypto.SignerOpts) (signature []byte, err error) {
 	fmt.Printf("crypto.Signer.Sign with key type %T, opts type %T, hash %s\n", k.Public(), opts, opts.HashFunc().String())
 
 	// Get private key

@@ -2,9 +2,13 @@ package certstore
 
 import (
 	"crypto"
+	"crypto/tls"
 	"crypto/x509"
 	"math/big"
 )
+
+// TLS cipher suites: https://www.rfc-editor.org/rfc/rfc8446.html#section-9.1
+const SupportedAlgorithm = tls.PSSWithSHA256
 
 type CertInfo struct {
 	Certificate *x509.Certificate
@@ -18,6 +22,5 @@ type CertInfo struct {
 }
 
 type CertStore struct {
-	ValidCerts           map[string]CertInfo
-	SelectedSerialNumber string
+	ValidCerts map[string]CertInfo
 }

@@ -1,13 +1,28 @@
-<h1>Select the location of your eIDAS certificate</h1>
+<h1>Select certificate location</h1>
+
+<p>You have to select an eIDAS certificate to sign</p>
 
 <div class="grid">
+    {{if eq .os "windows"}}
+    <article>
+        <header><b>Select from certstore</b></header>
+        <a role="button" href="/selectcertificate">Select from certstore</a>
+
+    </article>
+    {{end}}
 
     <article>
-        <header>
-            <b>A file in your disk</b>
-        </header>
-        <p>The LEARCredential has been signed and the employee has been notified via email.</p>
+        <header><b>Select from file</b></header>
+        <form action="/selectfilecertificate" method="post" enctype="multipart/form-data">
+            <label>
+                First name
+                <input type="file" name="file"/>
+            </label>
+            <input
+            type="submit"
+            value="Select"
+          />
+        </form>
     </article>
 
-    <a role="button" href="/">Home</a>
 </div>

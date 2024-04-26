@@ -3,18 +3,19 @@ package main
 import (
 	"bytes"
 	"crypto/tls"
-	"crypto/x509"
 	"embed"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"runtime"
 	"time"
 
 	"github.com/evidenceledger/elsignerw/certstore"
 	"github.com/evidenceledger/elsignerw/tokensign"
 	"github.com/pkg/browser"
+	"software.sslmate.com/src/go-pkcs12"
 
 	"github.com/evidenceledger/vcdemo/issuernew"
 	"github.com/evidenceledger/vcdemo/vault/x509util"
@@ -26,11 +27,10 @@ import (
 // var recordsGlobal CredentialRecords
 
 type server struct {
-	app                           *iris.Application
-	selectedCertstoreSerialNumber string
-	records                       CredentialRecords
-	certstoreSigner               *certstore.CertStore
-	x509Certificate               *x509.Certificate
+	app            *iris.Application
+	records        CredentialRecords
+	certStore      *certstore.CertStore
+	tlsCertificate *tls.Certificate
 }
 
 //go:embed data/*
@@ -76,7 +76,8 @@ func startIrisServer(debug bool) {
 	// The main page of the application
 	app.Get("/", s.homePage)
 
-	app.Get("/selectcertificate/{serial}", s.selectX509Certificates)
+	app.Post("selectfilecertificate", s.selectFileCertificate)
+	app.Get("/selectcertificate", s.selectFromCertstore)
 
 	app.Get("/formcreatecertification", s.formCreateCertification)
 	app.Post("/formcreatecertification", s.formCreateCertification)
@@ -98,56 +99,92 @@ func startIrisServer(debug bool) {
 
 }
 
-func (s *server) realHomePage(ctx iris.Context) {
-
-	if len(s.selectedCertstoreSerialNumber) == 0 {
-		// We have not yet initialised the certificate to use
-
-	}
-
-}
-
 func (s *server) homePage(ctx iris.Context) {
-	if len(s.selectedCertstoreSerialNumber) == 0 {
-		s.app.Logger().Info("selecting x509 certificates")
-		s.selectX509Certificates(ctx)
+
+	if s.tlsCertificate == nil {
+		// We have not yet selected the certificate to use
+		renderPage(ctx, "select_store", iris.Map{"os": runtime.GOOS})
 	} else {
 		s.app.Logger().Infof("certificate %s already selected")
 		s.displayLEARCredentials(ctx)
 	}
+
 }
 
-// selectX509Certificates is a self-submit page
-func (s *server) selectX509Certificates(ctx iris.Context) {
+func (s *server) selectFileCertificate(ctx iris.Context) {
+
+	file, fileHeader, err := ctx.FormFile("file")
+	if err != nil {
+		ctx.StopWithError(iris.StatusBadRequest, err)
+		return
+	}
+	s.app.Logger().Info("selectFileCertificate: file received %s with %d bytes", fileHeader.Filename, fileHeader.Size)
+
+	buf := make([]byte, fileHeader.Size)
+	_, err = file.Read(buf)
+	if err != nil {
+		ctx.StopWithError(iris.StatusBadRequest, err)
+		return
+	}
+
+	privateKey, certificate, _, err := pkcs12.DecodeChain(buf, "ThePassword")
+	if err != nil {
+		ctx.StopWithError(iris.StatusBadRequest, err)
+		return
+	}
+	s.app.Logger().Infof("selectFileCertificate: %s", certificate.SerialNumber)
+
+	s.tlsCertificate = &tls.Certificate{
+		Certificate:                  [][]byte{certificate.Raw},
+		PrivateKey:                   privateKey,
+		Leaf:                         certificate,
+		SupportedSignatureAlgorithms: []tls.SignatureScheme{tls.PSSWithSHA256},
+	}
+
+	s.displayLEARCredentials(ctx)
+
+}
+
+// selectFromCertstore is a self-submit page
+func (s *server) selectFromCertstore(ctx iris.Context) {
 	var err error
 
-	serialNumber := ctx.Params().Get("serial")
+	serialNumber := ctx.URLParam("serial")
 
 	// If the 'serial' path param is not found, we get the X509 certificates installed in the certstore (Windows only)
 	// and display a page with the whole list, so the user can select the one used for signatures
 	if len(serialNumber) == 0 {
-		s.certstoreSigner, err = certstore.New()
+		s.app.Logger().Info("selectFromCertstore: accessing the CertStore to get the certificates")
+		s.certStore, err = certstore.New()
 		if err != nil {
 			renderPage(ctx, "error", iris.Map{"title": "Error retrieving signing certificates", "description": "There has been an error retrieving certificater from the Windows certification store.", "message": err.Error()})
 			return
 		}
 
-		renderPage(ctx, "selectcert", iris.Map{"validcerts": s.certstoreSigner.ValidCerts})
+		renderPage(ctx, "selectcert", iris.Map{"validcerts": s.certStore.ValidCerts})
 		return
 	}
 
+	s.app.Logger().Infof("selectFromCertstore: accessing the CertStore to get the certificates")
+
 	// The user has selected the certificate for signature. Store it for later usage
-	s.app.Logger().Info("selectedX509Certificate ", serialNumber)
-	s.selectedCertstoreSerialNumber = serialNumber
-	s.certstoreSigner.SelectedSerialNumber = serialNumber
-	s.x509Certificate = s.certstoreSigner.ValidCerts[serialNumber].Certificate
+	s.app.Logger().Info("selectFromCertstore: selected %s", serialNumber)
+
+	certInfo := s.certStore.ValidCerts[serialNumber]
+
+	s.tlsCertificate = &tls.Certificate{
+		Certificate:                  [][]byte{certInfo.Certificate.Raw},
+		Leaf:                         certInfo.Certificate,
+		PrivateKey:                   certInfo.PrivateKey,
+		SupportedSignatureAlgorithms: []tls.SignatureScheme{certstore.SupportedAlgorithm},
+	}
 
 	// Go to display the credentials available for signature in the DOME Issuer server
 	s.displayLEARCredentials(ctx)
 
 }
 
-// displayLEARCredentials cass the remote DOME Issuer server and retrieves th ecredentials that this user has to sign.
+// displayLEARCredentials asks the remote DOME Issuer server and retrieves the credentials that this user has to sign.
 // The credentials are displayed so the user can interact with them.
 func (s *server) displayLEARCredentials(ctx iris.Context) {
 	var err error
@@ -218,10 +255,6 @@ func (s *server) signWithCertificate(ctx iris.Context) {
 		return
 	}
 
-	// This is the certificate that was selected by the user for signing
-	serialNumber := s.selectedCertstoreSerialNumber
-	s.app.Logger().Infof("signWithCertificate: cred: %s, certid: %s ", id, s.selectedCertstoreSerialNumber)
-
 	// Get the credential record that we have to sign
 	record := s.records[id]
 	if record == nil {
@@ -241,7 +274,11 @@ func (s *server) signWithCertificate(ctx iris.Context) {
 
 	// Sign the credential with the certificate selected previously
 	learCred := token.Claims.(*issuernew.LEARCredentialEmployeeJWTClaims)
-	tok, err := s.signLEARCredential(serialNumber, learCred.LEARCredentialEmployee)
+
+	// Sign the credential with the private key of the selected certificate
+	tok, err := issuernew.CreateLEARCredentialJWTtoken(learCred.LEARCredentialEmployee, tokensign.SigningMethodCert, s.tlsCertificate.PrivateKey)
+
+	// tok, err := s.signLEARCredential(serialNumber, learCred.LEARCredentialEmployee)
 	if err != nil {
 		renderPage(ctx, "error", iris.Map{"title": "Error signing the credential", "description": "There has been an error signing the LEARCredential with the selected certificate.", "message": err.Error()})
 		return
@@ -262,9 +299,9 @@ func (s *server) signWithCertificate(ctx iris.Context) {
 	client := http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
-				GetClientCertificate: s.certstoreSigner.GetClientCertificate,
-				MinVersion:           tls.VersionTLS13,
-				MaxVersion:           tls.VersionTLS13,
+				Certificates: []tls.Certificate{*s.tlsCertificate},
+				MinVersion:   tls.VersionTLS13,
+				MaxVersion:   tls.VersionTLS13,
 			},
 		},
 	}
@@ -302,13 +339,15 @@ func (s *server) retrieveCredentialsToSign() (CredentialRecords, error) {
 	var recordArray []CredentialRecord
 	records := CredentialRecords{}
 
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{*s.tlsCertificate},
+		MinVersion:   tls.VersionTLS13,
+		MaxVersion:   tls.VersionTLS13,
+	}
+
 	client := http.Client{
 		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{
-				GetClientCertificate: s.certstoreSigner.GetClientCertificate,
-				MinVersion:           tls.VersionTLS13,
-				MaxVersion:           tls.VersionTLS13,
-			},
+			TLSClientConfig: tlsConfig,
 		},
 	}
 
@@ -349,7 +388,7 @@ func (s *server) retrieveCredentialsToSign() (CredentialRecords, error) {
 func (s *server) signLEARCredential(serialNumber string, learCred issuernew.LEARCredentialEmployee) (string, error) {
 
 	// Get the certificate selected by the user
-	certInfo, ok := s.certstoreSigner.ValidCerts[serialNumber]
+	certInfo, ok := s.certStore.ValidCerts[serialNumber]
 	if !ok {
 		return "", fmt.Errorf("certificate not found for serial number: %s", serialNumber)
 	}
@@ -480,7 +519,7 @@ func (s *server) formCreateCertification(ctx iris.Context) {
 		// This path is when we are displaying the form
 		certification := &CertificationCredential{}
 
-		issuer := x509util.ParseEIDASNameFromATVSequence(s.x509Certificate.Subject.Names)
+		issuer := x509util.ParseEIDASNameFromATVSequence(s.tlsCertificate.Leaf.Subject.Names)
 
 		certification.CredentialSubject.Issuer.CommonName = issuer.CommonName
 		certification.CredentialSubject.Issuer.SerialNumber = issuer.SerialNumber
