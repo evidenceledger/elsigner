@@ -36,7 +36,7 @@ type server struct {
 //go:embed data/*
 var embeddedFS embed.FS
 
-func startIrisServer(debug bool) {
+func startIrisServer() {
 
 	// Load view templates
 	var tmpl *view.BlocksEngine
@@ -120,6 +120,8 @@ func (s *server) selectFileCertificate(ctx iris.Context) {
 	}
 	s.app.Logger().Info("selectFileCertificate: file received %s with %d bytes", fileHeader.Filename, fileHeader.Size)
 
+	password := ctx.FormValue("password")
+
 	buf := make([]byte, fileHeader.Size)
 	_, err = file.Read(buf)
 	if err != nil {
@@ -127,7 +129,7 @@ func (s *server) selectFileCertificate(ctx iris.Context) {
 		return
 	}
 
-	privateKey, certificate, _, err := pkcs12.DecodeChain(buf, "ThePassword")
+	privateKey, certificate, _, err := pkcs12.DecodeChain(buf, password)
 	if err != nil {
 		ctx.StopWithError(iris.StatusBadRequest, err)
 		return
@@ -168,7 +170,7 @@ func (s *server) selectFromCertstore(ctx iris.Context) {
 	s.app.Logger().Infof("selectFromCertstore: accessing the CertStore to get the certificates")
 
 	// The user has selected the certificate for signature. Store it for later usage
-	s.app.Logger().Info("selectFromCertstore: selected %s", serialNumber)
+	s.app.Logger().Infof("selectFromCertstore: selected %s", serialNumber)
 
 	certInfo := s.certStore.ValidCerts[serialNumber]
 
@@ -193,7 +195,8 @@ func (s *server) displayLEARCredentials(ctx iris.Context) {
 	records, err := s.retrieveCredentialsToSign()
 	if err != nil {
 		s.app.Logger().Errorf("retrieveCredentialsToSign: %s", err)
-		renderPage(ctx, "error", iris.Map{"title": "Error retrieving credentials", "description": "The issuer server may be down.", "message": err.Error()})
+		renderPage(ctx, "error", iris.Map{"title": "Error retrieving credentials", "description": "The issuer server may be down or the certificate is invalid.", "message": err.Error()})
+		s.tlsCertificate = nil
 		return
 	}
 	s.app.Logger().Infof("displayLEARCredentials: num records retrieved %d", len(records))
