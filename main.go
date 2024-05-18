@@ -8,7 +8,7 @@ import (
 	"runtime/debug"
 	"time"
 
-	"github.com/evidenceledger/elsignerw/x509util"
+	"github.com/evidenceledger/elsigner/x509util"
 	"github.com/hesusruiz/vcutils/yaml"
 	"github.com/urfave/cli/v2"
 	"software.sslmate.com/src/go-pkcs12"
@@ -34,7 +34,7 @@ func main() {
 	}
 
 	app := &cli.App{
-		Name:     "elsignerw",
+		Name:     "elsigner",
 		Version:  version,
 		Compiled: time.Now(),
 		Authors: []*cli.Author{
@@ -44,7 +44,7 @@ func main() {
 			},
 		},
 		Usage: "sign a Verifiable Credential with an eIDAS certificate",
-		// UsageText: "elsignerw [options] [INPUT_FILE] (default input file is index.txt)",
+		// UsageText: "elsigner [options] [INPUT_FILE] (default input file is index.txt)",
 		Action: sign,
 		Commands: []*cli.Command{
 			{

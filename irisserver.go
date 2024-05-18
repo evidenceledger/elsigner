@@ -12,8 +12,8 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/evidenceledger/elsignerw/certstore"
-	"github.com/evidenceledger/elsignerw/tokensign"
+	"github.com/evidenceledger/elsigner/certstore"
+	"github.com/evidenceledger/elsigner/tokensign"
 	"github.com/pkg/browser"
 	"software.sslmate.com/src/go-pkcs12"
 
@@ -23,8 +23,6 @@ import (
 	"github.com/kataras/iris/v12"
 	"github.com/kataras/iris/v12/view"
 )
-
-// var recordsGlobal CredentialRecords
 
 type server struct {
 	app            *iris.Application
@@ -38,7 +36,7 @@ var embeddedFS embed.FS
 
 func startIrisServer() {
 
-	// Load view templates
+	// Load view templates, either the embedded or the user-provided ones
 	var tmpl *view.BlocksEngine
 	if _, err := os.Stat("./data"); !os.IsNotExist(err) {
 		fmt.Println("Using external templates")
@@ -61,7 +59,7 @@ func startIrisServer() {
 		return a + b
 	})
 
-	// Create the server
+	// Create the server, embedding and HTTP server
 	app := iris.Default()
 	s := &server{}
 	s.app = app
@@ -70,15 +68,17 @@ func startIrisServer() {
 	// this will load the templates.
 	app.RegisterView(tmpl)
 
-	// Handle statis assets
+	// Handle static assets (css, js, ...)
 	app.HandleDir("/assets", iris.Dir("./data/assets"))
 
 	// The main page of the application
 	app.Get("/", s.homePage)
 
-	app.Post("selectfilecertificate", s.selectFileCertificate)
+	// The following two handle the form to select the file-based x509 certificate
+	app.Post("/selectfilecertificate", s.selectFileCertificate)
 	app.Get("/selectcertificate", s.selectFromCertstore)
 
+	// The following two handle the form for Certificate creation
 	app.Get("/formcreatecertification", s.formCreateCertification)
 	app.Post("/formcreatecertification", s.formCreateCertification)
 
@@ -91,14 +91,19 @@ func startIrisServer() {
 	// Close the server and exit
 	app.Get("/stop", s.stopServer)
 
+	// Open the default platform browser to display the UI
 	go func() {
 		time.Sleep(2 * time.Second)
 		browser.OpenURL("http://localhost:8080/")
 	}()
+
+	// Block listening for requests from the UI
 	app.Listen("localhost:8080")
 
 }
 
+// The home page checks if the user already selected an x509 cert before asking the
+// Issuer server for the credentials and displaying them
 func (s *server) homePage(ctx iris.Context) {
 
 	if s.tlsCertificate == nil {
@@ -111,6 +116,8 @@ func (s *server) homePage(ctx iris.Context) {
 
 }
 
+// Receives from the browser a stream with the contents of the certificate, and the password
+// for decrypting the certificate
 func (s *server) selectFileCertificate(ctx iris.Context) {
 
 	file, fileHeader, err := ctx.FormFile("file")
@@ -122,6 +129,7 @@ func (s *server) selectFileCertificate(ctx iris.Context) {
 
 	password := ctx.FormValue("password")
 
+	// Get the contents of the file
 	buf := make([]byte, fileHeader.Size)
 	_, err = file.Read(buf)
 	if err != nil {
@@ -129,6 +137,7 @@ func (s *server) selectFileCertificate(ctx iris.Context) {
 		return
 	}
 
+	// Decode the file to get the pribate key and the contents
 	privateKey, certificate, _, err := pkcs12.DecodeChain(buf, password)
 	if err != nil {
 		ctx.StopWithError(iris.StatusBadRequest, err)
@@ -136,6 +145,7 @@ func (s *server) selectFileCertificate(ctx iris.Context) {
 	}
 	s.app.Logger().Infof("selectFileCertificate: %s", certificate.SerialNumber)
 
+	// Convert the certificate to a TLS one and store in memory for later use
 	s.tlsCertificate = &tls.Certificate{
 		Certificate:                  [][]byte{certificate.Raw},
 		PrivateKey:                   privateKey,
@@ -143,11 +153,12 @@ func (s *server) selectFileCertificate(ctx iris.Context) {
 		SupportedSignatureAlgorithms: []tls.SignatureScheme{tls.PSSWithSHA256},
 	}
 
+	// Ask the Issuer server for the credentials and displey them
 	s.displayLEARCredentials(ctx)
 
 }
 
-// selectFromCertstore is a self-submit page
+// selectFromCertstore is a self-submit form
 func (s *server) selectFromCertstore(ctx iris.Context) {
 	var err error
 
@@ -167,13 +178,13 @@ func (s *server) selectFromCertstore(ctx iris.Context) {
 		return
 	}
 
-	s.app.Logger().Infof("selectFromCertstore: accessing the CertStore to get the certificates")
-
 	// The user has selected the certificate for signature. Store it for later usage
 	s.app.Logger().Infof("selectFromCertstore: selected %s", serialNumber)
 
+	// Get the selected certificate from the list
 	certInfo := s.certStore.ValidCerts[serialNumber]
 
+	// Convert the certificate to a TLS one and store in memory for later use
 	s.tlsCertificate = &tls.Certificate{
 		Certificate:                  [][]byte{certInfo.Certificate.Raw},
 		Leaf:                         certInfo.Certificate,
@@ -247,6 +258,8 @@ func (s *server) displayCredentialDetails(ctx iris.Context) {
 
 }
 
+// Signs the credential with the certificate and sends the signed credential to the Issuer
+// server updating its stored credential, ready to be retrieved by the user
 func (s *server) signWithCertificate(ctx iris.Context) {
 	var err error
 
@@ -281,7 +294,6 @@ func (s *server) signWithCertificate(ctx iris.Context) {
 	// Sign the credential with the private key of the selected certificate
 	tok, err := issuernew.CreateLEARCredentialJWTtoken(learCred.LEARCredentialEmployee, tokensign.SigningMethodCert, s.tlsCertificate.PrivateKey)
 
-	// tok, err := s.signLEARCredential(serialNumber, learCred.LEARCredentialEmployee)
 	if err != nil {
 		renderPage(ctx, "error", iris.Map{"title": "Error signing the credential", "description": "There has been an error signing the LEARCredential with the selected certificate.", "message": err.Error()})
 		return
@@ -337,6 +349,7 @@ func renderPage(ctx iris.Context, page string, data any) {
 type CredentialRecord map[string]any
 type CredentialRecords map[string]CredentialRecord
 
+// Ask the Issuer server for th ecredentials pending signature by this user
 func (s *server) retrieveCredentialsToSign() (CredentialRecords, error) {
 
 	var recordArray []CredentialRecord
@@ -379,31 +392,13 @@ func (s *server) retrieveCredentialsToSign() (CredentialRecords, error) {
 		return nil, err
 	}
 
-	// Convert the array to facilitate the life of the user
+	// Convert the array to a map indexed by the credential id to facilitate the life of the user
 	for _, rec := range recordArray {
 		id := rec["id"].(string)
 		records[id] = rec
 	}
 
 	return records, nil
-}
-
-func (s *server) signLEARCredential(serialNumber string, learCred issuernew.LEARCredentialEmployee) (string, error) {
-
-	// Get the certificate selected by the user
-	certInfo, ok := s.certStore.ValidCerts[serialNumber]
-	if !ok {
-		return "", fmt.Errorf("certificate not found for serial number: %s", serialNumber)
-	}
-	signer := certInfo.PrivateKey
-
-	// Sign the credential
-	tok, err := issuernew.CreateLEARCredentialJWTtoken(learCred, tokensign.SigningMethodCert, signer)
-	if err != nil {
-		return "", err
-	}
-
-	return tok, nil
 }
 
 type CertificationCredential struct {
@@ -548,6 +543,7 @@ func (s *server) formCreateCertification(ctx iris.Context) {
 
 }
 
+// Stops the server under the request of the user
 func (s *server) stopServer(ctx iris.Context) {
 	go func() {
 		time.Sleep(time.Second)

@@ -1,4 +1,4 @@
-module github.com/evidenceledger/elsignerw
+module github.com/evidenceledger/elsigner
 
 go 1.21
 
