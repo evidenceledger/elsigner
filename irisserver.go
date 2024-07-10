@@ -25,16 +25,21 @@ import (
 )
 
 type server struct {
-	app            *iris.Application
-	records        CredentialRecords
-	certStore      *certstore.CertStore
-	tlsCertificate *tls.Certificate
+	app             *iris.Application
+	records         CredentialRecords
+	certStore       *certstore.CertStore
+	tlsCertificate  *tls.Certificate
+	issuerURLQuery  string
+	issuerURLUpdate string
 }
 
 //go:embed data/*
 var embeddedFS embed.FS
 
-func startIrisServer() {
+func startIrisServer(issuerURLQuery string, issuerURLUpdate string) {
+
+	fmt.Println("Issuer query URL:", issuerURLQuery)
+	fmt.Println("Issuer update URL:", issuerURLUpdate)
 
 	// Load view templates, either the embedded or the user-provided ones
 	var tmpl *view.BlocksEngine
@@ -63,6 +68,10 @@ func startIrisServer() {
 	app := iris.Default()
 	s := &server{}
 	s.app = app
+
+	// Set the query and update URLs
+	s.issuerURLQuery = issuerURLQuery
+	s.issuerURLUpdate = issuerURLUpdate
 
 	// Register the view engine to the views,
 	// this will load the templates.
@@ -119,13 +128,14 @@ func (s *server) homePage(ctx iris.Context) {
 // Receives from the browser a stream with the contents of the certificate, and the password
 // for decrypting the certificate
 func (s *server) selectFileCertificate(ctx iris.Context) {
+	logger := s.app.Logger()
 
 	file, fileHeader, err := ctx.FormFile("file")
 	if err != nil {
-		ctx.StopWithError(iris.StatusBadRequest, err)
+		renderPage(ctx, "error", iris.Map{"title": "Error retrieving form data", "description": "There has been an error retrieving form data from the request.", "message": err.Error()})
 		return
 	}
-	s.app.Logger().Info("selectFileCertificate: file received %s with %d bytes", fileHeader.Filename, fileHeader.Size)
+	logger.Infof("selectFileCertificate: file received %s with %d bytes", fileHeader.Filename, fileHeader.Size)
 
 	password := ctx.FormValue("password")
 
@@ -133,6 +143,7 @@ func (s *server) selectFileCertificate(ctx iris.Context) {
 	buf := make([]byte, fileHeader.Size)
 	_, err = file.Read(buf)
 	if err != nil {
+		logger.Error(err)
 		ctx.StopWithError(iris.StatusBadRequest, err)
 		return
 	}
@@ -140,10 +151,11 @@ func (s *server) selectFileCertificate(ctx iris.Context) {
 	// Decode the file to get the pribate key and the contents
 	privateKey, certificate, _, err := pkcs12.DecodeChain(buf, password)
 	if err != nil {
-		ctx.StopWithError(iris.StatusBadRequest, err)
+		logger.Error(err)
+		renderPage(ctx, "error", iris.Map{"title": "Error reading certificate file", "description": "There has been an error reading the certificate file.", "message": err.Error()})
 		return
 	}
-	s.app.Logger().Infof("selectFileCertificate: %s", certificate.SerialNumber)
+	logger.Infof("selectFileCertificate: %s", certificate.SerialNumber)
 
 	// Convert the certificate to a TLS one and store in memory for later use
 	s.tlsCertificate = &tls.Certificate{
@@ -322,7 +334,7 @@ func (s *server) signWithCertificate(ctx iris.Context) {
 	}
 
 	// Send the signed credential back to the server
-	resp, err := client.Post("https://issuersec.mycredential.eu/apisigner/updatesignedcredential", "application/json", buf)
+	resp, err := client.Post(s.issuerURLUpdate, "application/json", buf)
 	if err != nil {
 		renderPage(ctx, "error", iris.Map{"title": "Error ending signed credential to server", "description": "There has been an error when trying to update the signed credential in the Issuer server.", "message": err.Error()})
 		return
@@ -367,10 +379,8 @@ func (s *server) retrieveCredentialsToSign() (CredentialRecords, error) {
 		},
 	}
 
-	url := "https://issuersec.mycredential.eu/apisigner/retrievecredentials"
-
 	// Make a GET request to the URL
-	resp, err := client.Get(url)
+	resp, err := client.Get(s.issuerURLQuery)
 	if err != nil {
 		return nil, err
 	}

@@ -14,6 +14,12 @@ import (
 	"software.sslmate.com/src/go-pkcs12"
 )
 
+const (
+	defaultIssuerURLUpdate = "https://issuersec.mycredential.eu/apisigner/updatesignedcredential"
+
+	defaultIssuerURLQuery = "https://issuersec.mycredential.eu/apisigner/retrievecredentials"
+)
+
 func main() {
 
 	version := "v0.10.3"
@@ -46,6 +52,21 @@ func main() {
 		Usage: "sign a Verifiable Credential with an eIDAS certificate",
 		// UsageText: "elsigner [options] [INPUT_FILE] (default input file is index.txt)",
 		Action: sign,
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:     "update",
+				Required: false,
+				Aliases:  []string{"u"},
+				Usage:    "the URL of the Issuer update endpoint",
+			},
+			&cli.StringFlag{
+				Name:     "query",
+				Required: false,
+				Aliases:  []string{"q"},
+				Usage:    "the URL of the Issuer query endpoint",
+			},
+		},
+
 		Commands: []*cli.Command{
 			{
 				Name:        "create",
@@ -92,7 +113,16 @@ func sign(cCtx *cli.Context) error {
 		return nil
 	}
 
-	startIrisServer()
+	issuerURLQuery := cCtx.String("query")
+	if len(issuerURLQuery) == 0 {
+		issuerURLQuery = defaultIssuerURLQuery
+	}
+	issuerURLUpdate := cCtx.String("update")
+	if len(issuerURLUpdate) == 0 {
+		issuerURLUpdate = defaultIssuerURLUpdate
+	}
+
+	startIrisServer(issuerURLQuery, issuerURLUpdate)
 	return nil
 }
 

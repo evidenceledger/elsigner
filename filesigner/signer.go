@@ -27,6 +27,13 @@ func GetPrivateKeyFromFile(fileName string, password string) (privateKey any, ce
 	return pkcs12.DecodeChain(certBinary, password)
 }
 
+// GetConfigPrivateKey retrieves the private key from a PKCS12 file in the following locations:
+// 1) the location specified in the environment variable CERT_FILE_PATH.
+// 2) $HOME/.certs/testcert.pfx.
+//
+// The password used is the following:
+// 1) specified in the environment variable CERT_PASSWORD.
+// 2) the content of the file specified in the env variable CERT_PASSWORD_FILE.
 func GetConfigPrivateKey() (privateKey any, certificate *x509.Certificate, caCerts []*x509.Certificate, err error) {
 
 	userHome, err := os.UserHomeDir()

@@ -1,11 +1,23 @@
 <h1>Select certificate location</h1>
 
-<p>You have to select an eIDAS certificate to sign</p>
+<p>You have to select an eIDAS certificate to sign. 
+    There are two possibilities for the location of such certificate:
+</p>
+<ul>
+    <li>The certificate is in the Windows certificate store, a secure store managed by the Windows system.</li>
+    <li>The certificate is in a file in your disk. This mechanism can be used in any system, but is typically used in Linux systems.</li>
+</ul>
+
+<p>Please, select the certificate using the mechanism most appropriate for you.</p>
 
 <div class="grid">
     {{if eq .os "windows"}}
     <article>
-        <header><b>Select from certstore</b></header>
+        <header><b>Select from Windows certstore</b></header>
+
+        <p>The application will query the store and present the certificates so you can select the one you want to use.</p>
+        <p>Click the button below to start the process.</p>
+
         <a role="button" href="/selectcertificate">Select from certstore</a>
 
     </article>
@@ -13,9 +25,12 @@
 
     <article>
         <header><b>Select from file</b></header>
+
+        <p>Select the certificate file using the button below.
+            If the file is encrypted (which it should), you have also to provide the password that was used to encrypt the certificate file.
+        </p>
         <form action="/selectfilecertificate" method="post" enctype="multipart/form-data">
             <label>
-                First name
                 <input type="file" name="file"/>
             </label>
             <label>
