@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"runtime"
@@ -40,6 +41,15 @@ func startIrisServer(issuerURLQuery string, issuerURLUpdate string) {
 
 	fmt.Println("Issuer query URL:", issuerURLQuery)
 	fmt.Println("Issuer update URL:", issuerURLUpdate)
+
+	entries, err := embeddedFS.ReadDir(".")
+	if err != nil {
+		panic(err)
+	}
+
+	for _, entry := range entries {
+		fmt.Println(entry.Name())
+	}
 
 	// Load view templates, either the embedded or the user-provided ones
 	var tmpl *view.BlocksEngine
@@ -78,7 +88,15 @@ func startIrisServer(issuerURLQuery string, issuerURLUpdate string) {
 	app.RegisterView(tmpl)
 
 	// Handle static assets (css, js, ...)
-	app.HandleDir("/assets", iris.Dir("./data/assets"))
+	if _, err := os.Stat("./data"); !os.IsNotExist(err) {
+		app.HandleDir("/assets", iris.Dir("./data/assets"))
+	} else {
+		subFilesystem, err := fs.Sub(embeddedFS, "data/assets")
+		if err != nil {
+			panic(err)
+		}
+		app.HandleDir("/assets", subFilesystem)
+	}
 
 	// The main page of the application
 	app.Get("/", s.homePage)

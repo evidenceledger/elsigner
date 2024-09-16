@@ -26,6 +26,9 @@ type KeyParams struct {
 	ValidFor   time.Duration
 }
 
+const defaultRsaBits = 2048
+const defaultValidFor = 365 * 24 * time.Hour
+
 type PEMCert []byte
 
 var attributeTypeNames = map[string]string{
@@ -48,6 +51,9 @@ func NewCAELSICertificateRaw(subAttrs ELSIName, keyparams KeyParams) (subPrivKey
 		if keyparams.Ed25519Key {
 			_, priv, err = ed25519.GenerateKey(rand.Reader)
 		} else {
+			if keyparams.RsaBits == 0 {
+				keyparams.RsaBits = defaultRsaBits
+			}
 			priv, err = rsa.GenerateKey(rand.Reader, keyparams.RsaBits)
 		}
 	case "P224":
@@ -88,7 +94,7 @@ func NewCAELSICertificateRaw(subAttrs ELSIName, keyparams KeyParams) (subPrivKey
 
 	// Set validity if not specified
 	if keyparams.ValidFor == 0 {
-		keyparams.ValidFor = 365 * 24 * time.Hour
+		keyparams.ValidFor = defaultValidFor
 	}
 	notAfter := notBefore.Add(keyparams.ValidFor)
 

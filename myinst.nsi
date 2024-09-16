@@ -1,4 +1,4 @@
-;NSIS installer for DOME Local signer
+;NSIS configuration for DOME Local signer
 
 ;--------------------------------
 ;Include Modern UI
@@ -17,7 +17,7 @@
   RequestExecutionLevel user
 
   ;Default installation folder
-  InstallDir "$PROFILE\.DOMEELSigner"
+  InstallDir "$PROFILE\DOMEELSigner"
     
   SetCompress off
 
@@ -60,6 +60,12 @@ Section "Local signer" SecDummy
   
   CreateShortcut "$DESKTOP\DOME Signer.lnk" "$INSTDIR\elsigner.exe"
 
+  WriteRegStr HKCU "Software\Classes\elsigner" "" "ELSIgner url protocol"
+  WriteRegStr HKCU "Software\Classes\elsigner" "URL Protocol" ""
+
+  WriteRegStr HKCU "Software\Classes\elsigner\shell\open\command" "" "$INSTDIR\elsigner.exe"
+  
+
 SectionEnd
 
 ;--------------------------------
@@ -81,6 +87,8 @@ Section "Uninstall"
   Delete "$INSTDIR\elsigner.exe"
   Delete "$INSTDIR\Uninstall.exe"
   Delete "$DESKTOP\DOME Signer.lnk"
+
+  DeleteRegKey HKCU "Software\Classes\elsigner"
 
   RMDir "$INSTDIR"
 

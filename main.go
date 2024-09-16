@@ -39,6 +39,15 @@ func main() {
 
 	}
 
+	usageText := `elsigner [global options] [command [command options]]
+
+	Started without any command, the program allows the user to connect to a remote Issuer server,
+	retrieve the credentials pending for signature, and sign each of them using a local eIDAS certificate.
+	The default Issuer to which the program connects can be modified using the global options.
+
+	The program can also generate a test eIDAS certificate to be used for testing, using the command 'create'.
+	`
+
 	app := &cli.App{
 		Name:     "elsigner",
 		Version:  version,
@@ -49,21 +58,23 @@ func main() {
 				Email: "hesus.ruiz@gmail.com",
 			},
 		},
-		Usage: "sign a Verifiable Credential with an eIDAS certificate",
-		// UsageText: "elsigner [options] [INPUT_FILE] (default input file is index.txt)",
-		Action: sign,
+		Usage:     "sign a Verifiable Credential with an eIDAS certificate",
+		UsageText: usageText,
+		Action:    sign,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:     "update",
 				Required: false,
 				Aliases:  []string{"u"},
 				Usage:    "the URL of the Issuer update endpoint",
+				Value:    defaultIssuerURLUpdate,
 			},
 			&cli.StringFlag{
 				Name:     "query",
 				Required: false,
 				Aliases:  []string{"q"},
 				Usage:    "the URL of the Issuer query endpoint",
+				Value:    defaultIssuerURLQuery,
 			},
 		},
 
@@ -72,13 +83,14 @@ func main() {
 				Name:        "create",
 				Aliases:     []string{"c"},
 				Usage:       "create a test eIDAS certificate",
-				Description: "creates a test eIDAs certificate from the data in the 'eidascert.yaml' file",
+				Description: "creates a test eIDAs certificate from the data in a YAML file",
 				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:     "password",
 						Required: true,
 						Aliases:  []string{"p"},
-						Usage:    "the password to use for encrypting the resulting certificate file)",
+						EnvVars:  []string{"ELSIGNER_PASSWORD"},
+						Usage:    "the password to use for encrypting the resulting certificate file",
 					},
 					&cli.StringFlag{
 						Name:    "subject",
@@ -90,7 +102,7 @@ func main() {
 						Name:    "output",
 						Aliases: []string{"o"},
 						Usage:   "write certificate data to `FILE`",
-						Value:   "mycert.p12",
+						Value:   "eidascert.p12",
 					},
 				},
 				Action: createCACert,
@@ -147,11 +159,8 @@ func createCACert(cCtx *cli.Context) error {
 	}
 	fmt.Println(subAttrs)
 
-	keyparams := x509util.KeyParams{
-		RsaBits:   2048,
-		ValidFrom: "Jan 1 15:04:05 2024",
-		ValidFor:  365 * 24 * time.Hour,
-	}
+	// Use the default values for the key parameters (RSA, 2048 bits)
+	keyparams := x509util.KeyParams{}
 
 	privateKey, newCert, err := x509util.NewCAELSICertificateRaw(subAttrs, keyparams)
 	if err != nil {
