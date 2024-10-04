@@ -1,17 +1,17 @@
 package main
 
 import (
+	"encoding/pem"
 	"fmt"
-	"log"
 	"os"
 	"runtime"
 	"runtime/debug"
 	"time"
 
+	"github.com/evidenceledger/elsigner/filesigner"
 	"github.com/evidenceledger/elsigner/x509util"
 	"github.com/hesusruiz/vcutils/yaml"
 	"github.com/urfave/cli/v2"
-	"software.sslmate.com/src/go-pkcs12"
 )
 
 const (
@@ -107,6 +107,28 @@ func main() {
 				},
 				Action: createCACert,
 			},
+			{
+				Name:        "display",
+				Aliases:     []string{"d"},
+				Usage:       "display an eIDAS certificate",
+				Description: "displays an eIDAs certificate from a PEM file",
+				Flags: []cli.Flag{
+					// &cli.StringFlag{
+					// 	Name:     "password",
+					// 	Required: true,
+					// 	Aliases:  []string{"p"},
+					// 	EnvVars:  []string{"ELSIGNER_PASSWORD"},
+					// 	Usage:    "the password to use for decrypting the certificate file",
+					// },
+					&cli.StringFlag{
+						Name:     "input",
+						Aliases:  []string{"i"},
+						Required: true,
+						Usage:    "the name of the `FILE`",
+					},
+				},
+				Action: displayCert,
+			},
 		},
 	}
 
@@ -162,31 +184,61 @@ func createCACert(cCtx *cli.Context) error {
 	// Use the default values for the key parameters (RSA, 2048 bits)
 	keyparams := x509util.KeyParams{}
 
+	// Create the self-signed CA certificate
 	privateKey, newCert, err := x509util.NewCAELSICertificateRaw(subAttrs, keyparams)
 	if err != nil {
 		return err
 	}
 
-	pfxData, err := pkcs12.Modern2023.Encode(privateKey, newCert, nil, cCtx.String("password"))
-	if err != nil {
-		panic(err)
-	}
-
+	// Save to a file in pkcs12 format, including the private key and the certificate
 	outputFileName := cCtx.String("output")
-	pfxFile, err := os.OpenFile(outputFileName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	pass := cCtx.String("password")
+	err = filesigner.SaveCertificateToPkcs12File(outputFileName, privateKey, newCert, pass)
 	if err != nil {
-		log.Fatalf("Failed to open %s for writing: %v", outputFileName, err)
-	}
-	_, err = pfxFile.Write(pfxData)
-	if err != nil {
-		log.Fatalf("Error writing to %s: %v", outputFileName, err)
+		return err
 	}
 
-	if err := pfxFile.Close(); err != nil {
-		log.Fatalf("Error closing %s: %v", outputFileName, err)
+	const pemFileName = "cacert_generated.pem"
+	pemFile, err := os.OpenFile(pemFileName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	if err != nil {
+		return fmt.Errorf("failed to open %s for writing: %w", outputFileName, err)
 	}
 
-	fmt.Printf("Certificate created in: %s", outputFileName)
+	block := &pem.Block{
+		Type:  "CERTIFICATE",
+		Bytes: newCert.Raw,
+	}
+
+	if err := pem.Encode(pemFile, block); err != nil {
+		return err
+	}
+
+	if err := pemFile.Close(); err != nil {
+		return err
+	}
+
+	fmt.Printf("Certificate created in: %s\n", outputFileName)
+	return nil
+}
+
+func displayCert(cCtx *cli.Context) error {
+
+	// Save to a file in pkcs12 format, including the private key and the certificate
+	inputFileName := cCtx.String("input")
+
+	pemData, err := os.ReadFile(inputFileName)
+	if err != nil {
+		return err
+	}
+
+	_, issuer, subject, err := x509util.ParseCertificateFromPEM(pemData)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println(issuer)
+	fmt.Println(subject)
+
 	return nil
 }
 
