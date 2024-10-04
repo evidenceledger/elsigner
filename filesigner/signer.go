@@ -3,6 +3,7 @@ package filesigner
 import (
 	"bytes"
 	"crypto/x509"
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -15,6 +16,30 @@ func LookupEnvOrString(key string, defaultVal string) string {
 		return val
 	}
 	return defaultVal
+}
+
+func SaveCertificateToPkcs12File(outputFileName string, privateKey any, cert *x509.Certificate, pass string) error {
+
+	pfxData, err := pkcs12.Modern2023.Encode(privateKey, cert, nil, pass)
+	if err != nil {
+		panic(err)
+	}
+
+	pfxFile, err := os.OpenFile(outputFileName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	if err != nil {
+		return fmt.Errorf("failed to open %s for writing: %w", outputFileName, err)
+	}
+	_, err = pfxFile.Write(pfxData)
+	if err != nil {
+		return fmt.Errorf("error writing to %s: %w", outputFileName, err)
+	}
+
+	if err := pfxFile.Close(); err != nil {
+		return fmt.Errorf("error closing %s: %w", outputFileName, err)
+	}
+
+	return nil
+
 }
 
 func GetPrivateKeyFromFile(fileName string, password string) (privateKey any, certificate *x509.Certificate, caCerts []*x509.Certificate, err error) {
