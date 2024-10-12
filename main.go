@@ -19,7 +19,7 @@ import (
 const (
 	defaultIssuerOrigin     = "issuersec.mycredential.eu"
 	defaultIssuerQueryPath  = "/apisigner/retrievecredentials"
-	defaultIssuerUpdatePath = "/apisigner/retrievecredentials"
+	defaultIssuerUpdatePath = "/apisigner/updatesignedcredential"
 )
 
 func main() {

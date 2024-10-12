@@ -370,13 +370,18 @@ func (s *server) signWithCertificate(ctx iris.Context) {
 	// Send the signed credential back to the server
 	resp, err := client.Post(s.issuerURLUpdate, "application/json", buf)
 	if err != nil {
-		renderPage(ctx, "error", iris.Map{"title": "Error ending signed credential to server", "description": "There has been an error when trying to update the signed credential in the Issuer server.", "message": err.Error()})
+		renderPage(ctx, "error", iris.Map{"title": "Error sending signed credential to server", "description": "There has been an error when trying to update the signed credential in the Issuer server.", "message": err.Error()})
 		return
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		renderPage(ctx, "error", iris.Map{"title": "Error reading response from server", "description": "There has been an error receiving the response from the Issuer server when updating the LEARCredential.", "message": err.Error()})
+		return
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		renderPage(ctx, "error", iris.Map{"title": "Error calling API in server", "description": "There has been an error sending the credential to Issuer server.", "message": string(body)})
 		return
 	}
 	fmt.Println("response", string(body))
