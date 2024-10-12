@@ -63,7 +63,7 @@ Section "Local signer" SecDummy
   WriteRegStr HKCU "Software\Classes\elsigner" "" "ELSIgner url protocol"
   WriteRegStr HKCU "Software\Classes\elsigner" "URL Protocol" ""
 
-  WriteRegStr HKCU "Software\Classes\elsigner\shell\open\command" "" "$INSTDIR\elsigner.exe"
+  WriteRegStr HKCU "Software\Classes\elsigner\shell\open\command" "" '"$INSTDIR\elsigner.exe" "%1"'
   
 
 SectionEnd

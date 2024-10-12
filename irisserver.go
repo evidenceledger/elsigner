@@ -27,8 +27,10 @@ import (
 
 type server struct {
 	app             *iris.Application
+	isWindows       bool
 	records         CredentialRecords
 	certStore       *certstore.CertStore
+	storeError      error
 	tlsCertificate  *tls.Certificate
 	issuerURLQuery  string
 	issuerURLUpdate string
@@ -37,19 +39,26 @@ type server struct {
 //go:embed data/*
 var embeddedFS embed.FS
 
-func startIrisServer(issuerURLQuery string, issuerURLUpdate string) {
+func startIrisServer(issuerOrigin string, issuerQueryPath string, issuerUpdatePath string) {
+	var err error
+
+	if len(issuerOrigin) == 0 {
+		issuerOrigin = defaultIssuerOrigin
+	}
+
+	if len(issuerQueryPath) == 0 {
+		issuerQueryPath = defaultIssuerQueryPath
+	}
+
+	if len(issuerUpdatePath) == 0 {
+		issuerUpdatePath = defaultIssuerUpdatePath
+	}
+
+	issuerURLQuery := "https://" + issuerOrigin + issuerQueryPath
+	issuerURLUpdate := "https://" + issuerOrigin + issuerUpdatePath
 
 	fmt.Println("Issuer query URL:", issuerURLQuery)
 	fmt.Println("Issuer update URL:", issuerURLUpdate)
-
-	entries, err := embeddedFS.ReadDir(".")
-	if err != nil {
-		panic(err)
-	}
-
-	for _, entry := range entries {
-		fmt.Println(entry.Name())
-	}
 
 	// Load view templates, either the embedded or the user-provided ones
 	var tmpl *view.BlocksEngine
@@ -74,10 +83,25 @@ func startIrisServer(issuerURLQuery string, issuerURLUpdate string) {
 		return a + b
 	})
 
-	// Create the server, embedding and HTTP server
+	// Create the server, embedding an HTTP server
 	app := iris.Default()
 	s := &server{}
 	s.app = app
+
+	// The Windows certstore is only available on Windows (obviously!)
+	// If we are running on Windows, mark it on the server struct
+	currentOS := runtime.GOOS
+	if currentOS == "windows" {
+		s.isWindows = true
+	}
+
+	// Try to get the certificates from the Windows store
+	if s.isWindows {
+		s.certStore, err = certstore.New()
+		if err != nil {
+			s.storeError = err
+		}
+	}
 
 	// Set the query and update URLs
 	s.issuerURLQuery = issuerURLQuery
@@ -135,7 +159,7 @@ func (s *server) homePage(ctx iris.Context) {
 
 	if s.tlsCertificate == nil {
 		// We have not yet selected the certificate to use
-		renderPage(ctx, "select_store", iris.Map{"os": runtime.GOOS})
+		renderPage(ctx, "select_store", iris.Map{"os": runtime.GOOS, "validcerts": s.certStore.ValidCerts})
 	} else {
 		s.app.Logger().Infof("certificate %s already selected")
 		s.displayLEARCredentials(ctx)
@@ -166,7 +190,7 @@ func (s *server) selectFileCertificate(ctx iris.Context) {
 		return
 	}
 
-	// Decode the file to get the pribate key and the contents
+	// Decode the file to get the private key and the contents
 	privateKey, certificate, _, err := pkcs12.DecodeChain(buf, password)
 	if err != nil {
 		logger.Error(err)
@@ -190,21 +214,13 @@ func (s *server) selectFileCertificate(ctx iris.Context) {
 
 // selectFromCertstore is a self-submit form
 func (s *server) selectFromCertstore(ctx iris.Context) {
-	var err error
 
 	serialNumber := ctx.URLParam("serial")
 
 	// If the 'serial' path param is not found, we get the X509 certificates installed in the certstore (Windows only)
 	// and display a page with the whole list, so the user can select the one used for signatures
 	if len(serialNumber) == 0 {
-		s.app.Logger().Info("selectFromCertstore: accessing the CertStore to get the certificates")
-		s.certStore, err = certstore.New()
-		if err != nil {
-			renderPage(ctx, "error", iris.Map{"title": "Error retrieving signing certificates", "description": "There has been an error retrieving certificater from the Windows certification store.", "message": err.Error()})
-			return
-		}
-
-		renderPage(ctx, "selectcert", iris.Map{"validcerts": s.certStore.ValidCerts})
+		renderPage(ctx, "error", iris.Map{"title": "Error", "description": "selectFromCertstore has been called without a certificate identifier.", "message": "The certificate parameter has not been received"})
 		return
 	}
 

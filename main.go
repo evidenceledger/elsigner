@@ -3,9 +3,11 @@ package main
 import (
 	"encoding/pem"
 	"fmt"
+	"net/url"
 	"os"
 	"runtime"
 	"runtime/debug"
+	"strings"
 	"time"
 
 	"github.com/evidenceledger/elsigner/filesigner"
@@ -15,14 +17,24 @@ import (
 )
 
 const (
-	defaultIssuerURLUpdate = "https://issuersec.mycredential.eu/apisigner/updatesignedcredential"
-
-	defaultIssuerURLQuery = "https://issuersec.mycredential.eu/apisigner/retrievecredentials"
+	defaultIssuerOrigin     = "issuersec.mycredential.eu"
+	defaultIssuerQueryPath  = "/apisigner/retrievecredentials"
+	defaultIssuerUpdatePath = "/apisigner/retrievecredentials"
 )
 
 func main() {
 
-	version := "v0.10.3"
+	version := "v0.10.4"
+
+	// Detect if the program has been invoked by the browser using the custom URI schema 'elsigner'
+	if len(os.Args) > 1 {
+		if strings.HasPrefix(os.Args[1], "elsigner:") {
+			if err := signBrowser(os.Args[1]); err != nil {
+				fmt.Println(err)
+				return
+			}
+		}
+	}
 
 	// Get the version control info, to embed in the program version
 	rtinfo, ok := debug.ReadBuildInfo()
@@ -63,18 +75,25 @@ func main() {
 		Action:    sign,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
-				Name:     "update",
+				Name:     "origin",
 				Required: false,
-				Aliases:  []string{"u"},
-				Usage:    "the URL of the Issuer update endpoint",
-				Value:    defaultIssuerURLUpdate,
+				Aliases:  []string{"d"},
+				Usage:    "the domain of the Issuer",
+				Value:    defaultIssuerOrigin,
 			},
 			&cli.StringFlag{
 				Name:     "query",
 				Required: false,
 				Aliases:  []string{"q"},
-				Usage:    "the URL of the Issuer query endpoint",
-				Value:    defaultIssuerURLQuery,
+				Usage:    "the path of the Issuer query endpoint",
+				Value:    defaultIssuerQueryPath,
+			},
+			&cli.StringFlag{
+				Name:     "update",
+				Required: false,
+				Aliases:  []string{"u"},
+				Usage:    "the path of the Issuer update endpoint",
+				Value:    defaultIssuerUpdatePath,
 			},
 		},
 
@@ -138,6 +157,7 @@ func main() {
 
 }
 
+// sign is called when the program is invoked from the command line or clicking on it
 func sign(cCtx *cli.Context) error {
 	// The Windows certstore is only available on Windows (obviously!)
 	currentOS := runtime.GOOS
@@ -147,20 +167,134 @@ func sign(cCtx *cli.Context) error {
 		return nil
 	}
 
-	issuerURLQuery := cCtx.String("query")
-	if len(issuerURLQuery) == 0 {
-		issuerURLQuery = defaultIssuerURLQuery
-	}
-	issuerURLUpdate := cCtx.String("update")
-	if len(issuerURLUpdate) == 0 {
-		issuerURLUpdate = defaultIssuerURLUpdate
-	}
+	issuerOrigin := cCtx.String("origin")
+	issuerQueryPath := cCtx.String("query")
+	issuerUpdatePath := cCtx.String("update")
 
-	startIrisServer(issuerURLQuery, issuerURLUpdate)
+	startIrisServer(issuerOrigin, issuerQueryPath, issuerUpdatePath)
+	return nil
+}
+
+// signBrowser is called when the program is invoked by the browser using the custom scheme
+func signBrowser(argument string) error {
+
+	parsedArg, err := url.Parse(argument)
+	if err != nil {
+		return err
+	}
+	queryValues := parsedArg.Query()
+
+	issuerOrigin := queryValues.Get("origin")
+	issuerQueryPath := queryValues.Get("query")
+	issuerUpdatePath := queryValues.Get("update")
+
+	startIrisServer(issuerOrigin, issuerQueryPath, issuerUpdatePath)
 	return nil
 }
 
 func createCACert(cCtx *cli.Context) error {
+
+	//*******************************
+	// Create the CA certificate
+	//*******************************
+
+	// Read the data to include in the CA Certificate
+	fileName := "cert_ca.yaml"
+	cd, err := readCertData(fileName)
+	if err != nil {
+		fmt.Println("file", fileName, "not found, using default values")
+		cd = yaml.New("")
+	}
+
+	subAttrs := x509util.ELSIName{
+		OrganizationIdentifier: cd.String("OrganizationIdentifier", "VATES-55663399H"),
+		Organization:           cd.String("Organization", "DOME Marketplace"),
+		CommonName:             cd.String("CommonName", "RUIZ JESUS - 12345678V"),
+		Country:                cd.String("Country", "ES"),
+	}
+
+	// Use the default values for the key parameters (RSA, 2048 bits)
+	keyparams := x509util.KeyParams{}
+
+	// Create the self-signed CA certificate
+	privateCAKey, newCACert, err := x509util.NewCAELSICertificateRaw(subAttrs, keyparams)
+	if err != nil {
+		return err
+	}
+
+	// Save to a file in pkcs12 format, including the private key and the certificate
+	outputFileName := "cert_ca.p12"
+	pass := cCtx.String("password")
+	err = filesigner.SaveCertificateToPkcs12File(outputFileName, privateCAKey, newCACert, pass)
+	if err != nil {
+		return err
+	}
+
+	// Save the certificate to a file in PEM format
+	const pemFileName = "cert_ca.pem"
+	pemFile, err := os.OpenFile(pemFileName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	if err != nil {
+		return fmt.Errorf("failed to open %s for writing: %w", outputFileName, err)
+	}
+
+	block := &pem.Block{
+		Type:  "CERTIFICATE",
+		Bytes: newCACert.Raw,
+	}
+
+	if err := pem.Encode(pemFile, block); err != nil {
+		return err
+	}
+
+	if err := pemFile.Close(); err != nil {
+		return err
+	}
+
+	//*******************************
+	// Create the leaf certificate
+	//*******************************
+
+	fileName = "cert.yaml"
+	cd, err = readCertData(fileName)
+	if err != nil {
+		fmt.Println("file", fileName, "not found, using default values")
+		cd = yaml.New("")
+	}
+
+	subAttrs = x509util.ELSIName{
+		OrganizationIdentifier: cd.String("OrganizationIdentifier", "VATES-55663399H"),
+		Organization:           cd.String("Organization", "DOME Marketplace"),
+		CommonName:             cd.String("CommonName", "RUIZ JESUS - 12345678V"),
+		GivenName:              cd.String("GivenName", "JESUS"),
+		Surname:                cd.String("Surname", "RUIZ"),
+		EmailAddress:           cd.String("EmailAddress", "jesus@alastria.io"),
+		SerialNumber:           cd.String("SerialNumber", "IDCES-12345678V"),
+		Country:                cd.String("Country", "ES"),
+	}
+	fmt.Println(subAttrs)
+
+	// Create the entity certificate, signed by the CA certificate
+	privateKey, newCert, err := x509util.NewELSICertificateRaw(
+		newCACert,
+		privateCAKey,
+		subAttrs,
+		keyparams)
+	if err != nil {
+		return err
+	}
+
+	// Save to a file in pkcs12 format, including the private key and the certificate
+	outputFileName = "cert.p12"
+	err = filesigner.SaveCertificateToPkcs12File(outputFileName, privateKey, newCert, pass)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Certificate created in: %s\n", outputFileName)
+	return nil
+}
+
+func createCert(cCtx *cli.Context) error {
 
 	fileName := cCtx.String("subject")
 	cd, err := readCertData(fileName)

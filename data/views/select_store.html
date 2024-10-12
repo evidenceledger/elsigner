@@ -1,47 +1,71 @@
-<h1>Select certificate location</h1>
+<h2>Step 1: Select certificate location</h2>
 
-<p>You have to select an eIDAS certificate to sign. 
-    There are two possibilities for the location of such certificate:
+<p>You have to select an eIDAS certificate to be able to sign the credential.
 </p>
-<ul>
-    <li>The certificate is in the Windows certificate store, a secure store managed by the Windows system.</li>
-    <li>The certificate is in a file in your disk. This mechanism can be used in any system, but is typically used in Linux systems.</li>
-</ul>
 
-<p>Please, select the certificate using the mechanism most appropriate for you.</p>
-
-<div class="grid">
-    {{if eq .os "windows"}}
-    <article>
-        <header><b>Select from Windows certstore</b></header>
-
-        <p>The application will query the store and present the certificates so you can select the one you want to use.</p>
-        <p>Click the button below to start the process.</p>
-
-        <a role="button" href="/selectcertificate">Select from certstore</a>
-
-    </article>
+{{if .validcerts}}
+<article>
+    <header><b>We found certificates in the Windows cert store</b></header>
+    {{if eq (len .validcerts) 1}}
+    <p>We have found one certificate in the Windows certificate store. You can select the certificate below if it is the one you want.</p>
+    {{else}}
+    <p>We have found several certificates in the Windows certificate store. You can select one of the certificates below.</p>
     {{end}}
 
-    <article>
-        <header><b>Select from file</b></header>
+    <div class="overflow-auto">
+    <table>
+        <thead>
+            <tr>
+                <th scope="col"></th>
+                <th scope="col">Common name</th>
+                <th scope="col">Organisation</th>
+                <th scope="col">Issuer</th>
+                <th scope="col">Valid until</th>
+            </tr>
+        </thead>
+        <tbody>
 
-        <p>Select the certificate file using the button below.
-            If the file is encrypted (which it should), you have also to provide the password that was used to encrypt the certificate file.
-        </p>
-        <form action="/selectfilecertificate" method="post" enctype="multipart/form-data">
-            <label>
-                <input type="file" name="file"/>
-            </label>
-            <label>
-                Password for the certificate
-                <input type="password" name="password" placeholder="Password" aria-label="Password" />
-            </label>
-            <input
-            type="submit"
-            value="Select"
-          />
-        </form>
-    </article>
+            {{range .validcerts}}
 
-</div>
+            <tr>
+                <td scope="row"><a role="button" href="/selectcertificate?serial={{.SerialNumber}}">Select</a></td>
+                <td>{{.CommonName}}</td>
+                <td>{{.Organization}}</td>
+                <td>{{.IssuerCommonName}}</td>
+                <td>{{.NotAfter}}</td>
+            </tr>
+
+            {{end}}
+
+        </tbody>
+    </table>
+    </div>
+</article>
+{{end}}
+
+
+<article>
+    <header><b>Select a certificate from a file</b></header>
+
+    {{if .validcerts}}
+    <p>Alternatively, you can use a certificate in a file in your disk.</p>
+    {{else}}
+    <p>You can select a certificate in a file in your disk.</p>
+    {{end}}
+    <p><b>If the file is encrypted (which it should), you have also to provide the password that was used to encrypt the certificate file.</b>
+    </p>
+    <form action="/selectfilecertificate" method="post" enctype="multipart/form-data">
+        <label>
+            <input type="file" name="file"/>
+        </label>
+        <label>
+            Password for the certificate
+            <input type="password" name="password" placeholder="Password" aria-label="Password" />
+        </label>
+        <input
+        type="submit"
+        value="Select"
+        />
+    </form>
+</article>
+

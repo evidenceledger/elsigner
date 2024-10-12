@@ -7,6 +7,7 @@
         <tr>
             <th scope="col"></th>
             <th scope="col">Common name</th>
+            <th scope="col">Organisation</th>
             <th scope="col">Issuer</th>
             <th scope="col">Valid until</th>
         </tr>
@@ -18,6 +19,7 @@
         <tr>
             <td scope="row"><a role="button" href="/selectcertificate?serial={{.SerialNumber}}">Select</a></td>
             <td>{{.CommonName}}</td>
+            <td>{{.Organization}}</td>
             <td>{{.IssuerCommonName}}</td>
             <td>{{.NotAfter}}</td>
         </tr>

@@ -61,7 +61,7 @@ func (ws *CertStore) RetrieveValidCertsFromWindows() (map[string]CertInfo, error
 	// Get the current time to check for validity of the certificates
 	now := time.Now()
 
-	// Iterate through all certificates in the Windows certstore, selection the ones we want
+	// Iterate through all certificates in the Windows certstore, selecting the ones we want
 	validCerts := map[string]CertInfo{}
 	var certContext *windows.CertContext
 	for {
@@ -88,31 +88,44 @@ func (ws *CertStore) RetrieveValidCertsFromWindows() (map[string]CertInfo, error
 
 		// We are interested in not expired certificates (and those that can be used now, so we check for the NotBefore date).
 		// And also only in the ones which can be used for signing
-		if now.After(thisX509Cert.NotBefore) && now.Before(thisX509Cert.NotAfter) && (thisX509Cert.KeyUsage&x509.KeyUsageDigitalSignature) > 0 {
-			fmt.Printf("FOUND!! %s - %v\n", thisX509Cert.Subject.CommonName, thisX509Cert.NotAfter)
-			certInfo := CertInfo{
-				Certificate:      thisX509Cert,
-				CommonName:       thisX509Cert.Subject.CommonName,
-				IssuerCommonName: thisX509Cert.Issuer.CommonName,
-				KeyUsage:         int(thisX509Cert.KeyUsage),
-				NotAfter:         thisX509Cert.NotAfter.Format("2006-01-02"),
-				SerialNumber:     thisX509Cert.SerialNumber,
-			}
+		subject := thisX509Cert.Subject
+		if now.Before(thisX509Cert.NotBefore) ||
+			now.After(thisX509Cert.NotAfter) ||
+			(thisX509Cert.KeyUsage&x509.KeyUsageDigitalSignature) == 0 ||
+			len(subject.Country) == 0 {
 
-			// Duplicate the Windows certificate context, because it would be freed while iterating the certstore
-			dupContext := windows.CertDuplicateCertificateContext(certContext)
-
-			// Create a custom crypto.Signer which is a wrapper to the private key inside the certstore.
-			// We do not really have the private key in our program memory, but instead the signature will be
-			// performed inside the certstore
-			customSigner := &WindowsCertstoreSigner{
-				windowsCertContext: dupContext,
-				x509Cert:           thisX509Cert,
-			}
-			certInfo.PrivateKey = customSigner
-
-			validCerts[thisX509Cert.SerialNumber.String()] = certInfo
+			continue
 		}
+
+		fmt.Printf("FOUND: %s - %v\n", thisX509Cert.Subject.CommonName, thisX509Cert.NotAfter)
+		certInfo := CertInfo{
+			Certificate:      thisX509Cert,
+			CommonName:       thisX509Cert.Subject.CommonName,
+			IssuerCommonName: thisX509Cert.Issuer.CommonName,
+			KeyUsage:         int(thisX509Cert.KeyUsage),
+			NotAfter:         thisX509Cert.NotAfter.Format("2006-01-02"),
+			SerialNumber:     thisX509Cert.SerialNumber,
+		}
+
+		if len(thisX509Cert.Subject.Organization) > 0 {
+			certInfo.Organization = thisX509Cert.Subject.Organization[0]
+		} else {
+			certInfo.Organization = "*Personal*"
+		}
+
+		// Duplicate the Windows certificate context, because it would be freed while iterating the certstore
+		dupContext := windows.CertDuplicateCertificateContext(certContext)
+
+		// Create a custom crypto.Signer which is a wrapper to the private key inside the certstore.
+		// We do not really have the private key in our program memory, but instead the signature will be
+		// performed inside the certstore
+		customSigner := &WindowsCertstoreSigner{
+			windowsCertContext: dupContext,
+			x509Cert:           thisX509Cert,
+		}
+		certInfo.PrivateKey = customSigner
+
+		validCerts[thisX509Cert.SerialNumber.String()] = certInfo
 
 	}
 

@@ -6,8 +6,10 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha1"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/asn1"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
@@ -228,8 +230,20 @@ func NewELSICertificateRaw(issCert *x509.Certificate, issPrivKey any, subAttrs E
 		BasicConstraintsValid: true,
 	}
 
+	pubKey := publicKey(priv)
+
+	publicKeyBytes, err := marshalPublicKey(pubKey)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	h := sha1.Sum(publicKeyBytes)
+	subjectKeyId := h[:]
+
+	template.SubjectKeyId = subjectKeyId
+
 	// Create the certificate and receive a DER-encoded byte array.
-	derBytes, err := x509.CreateCertificate(rand.Reader, &template, issCert, publicKey(priv), issPrivKey)
+	derBytes, err := x509.CreateCertificate(rand.Reader, &template, issCert, pubKey, issPrivKey)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create x509 certificate: %w", err)
 	}
@@ -242,6 +256,29 @@ func NewELSICertificateRaw(issCert *x509.Certificate, issPrivKey any, subAttrs E
 
 	return priv, newCert, nil
 
+}
+
+// pkcs1PublicKey reflects the ASN.1 structure of a PKCS #1 public key.
+type pkcs1PublicKey struct {
+	N *big.Int
+	E int
+}
+
+func marshalPublicKey(pub any) (publicKeyBytes []byte, err error) {
+	switch pub := pub.(type) {
+	case *rsa.PublicKey:
+		publicKeyBytes, err = asn1.Marshal(pkcs1PublicKey{
+			N: pub.N,
+			E: pub.E,
+		})
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, fmt.Errorf("x509: unsupported public key type: %T", pub)
+	}
+
+	return publicKeyBytes, nil
 }
 
 // ParseCertificate extracts the first certificate from the given PEM string.

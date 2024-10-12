@@ -15,6 +15,7 @@ type CertInfo struct {
 	PrivateKey  crypto.Signer
 
 	CommonName       string
+	Organization     string
 	IssuerCommonName string
 	KeyUsage         int
 	NotAfter         string
