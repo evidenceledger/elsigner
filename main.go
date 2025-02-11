@@ -100,9 +100,42 @@ func main() {
 		Commands: []*cli.Command{
 			{
 				Name:        "create",
-				Aliases:     []string{"c"},
-				Usage:       "create a test eIDAS certificate",
-				Description: "creates a test eIDAs certificate from the data in a YAML file",
+				Usage:       "create a leaf test eIDAS certificate",
+				Description: "creates a leaf test eIDAs certificate from the data in a YAML file",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:     "password",
+						Required: true,
+						Aliases:  []string{"p"},
+						EnvVars:  []string{"ELSIGNER_PASSWORD"},
+						Usage:    "the password to use for encrypting the resulting certificate file",
+					},
+					&cli.StringFlag{
+						Name:    "cacert",
+						Aliases: []string{"ca"},
+						Usage:   "CA certificate file in PKCS12 format",
+						Value:   "cert_ca.p12",
+					},
+					&cli.StringFlag{
+						Name:    "subject",
+						Aliases: []string{"s"},
+						Usage:   "subject input data `FILE` in YAML format",
+						Value:   "eidascert.yaml",
+					},
+					&cli.StringFlag{
+						Name:    "output",
+						Aliases: []string{"o"},
+						Usage:   "write certificate data to `FILE` in PKCS12 format",
+						Value:   "eidascert.p12",
+					},
+				},
+				Action: createCert,
+			},
+
+			{
+				Name:        "createca",
+				Usage:       "create a test eIDAS CA certificate as the root certificate",
+				Description: "creates a test eIDAs CA certificate from the data in a YAML file",
 				Flags: []cli.Flag{
 					&cli.StringFlag{
 						Name:     "password",
@@ -126,6 +159,7 @@ func main() {
 				},
 				Action: createCACert,
 			},
+
 			{
 				Name:        "display",
 				Aliases:     []string{"d"},
@@ -296,7 +330,27 @@ func createCACert(cCtx *cli.Context) error {
 
 func createCert(cCtx *cli.Context) error {
 
-	fileName := cCtx.String("subject")
+	//*******************************
+	// Retrieve the CA certificate
+	//*******************************
+
+	// Read the data to include in the CA Certificate
+	fileName := cCtx.String("cacert")
+	pass := cCtx.String("password")
+
+	privateCAKey, newCACert, _, err := filesigner.GetPrivateKeyFromFile(fileName, pass)
+	if err != nil {
+		return err
+	}
+
+	//*******************************
+	// Create the leaf certificate
+	//*******************************
+
+	// Use the default values for the key parameters (RSA, 2048 bits)
+	keyparams := x509util.KeyParams{}
+
+	fileName = cCtx.String("subject")
 	cd, err := readCertData(fileName)
 	if err != nil {
 		fmt.Println("file", fileName, "not found, using default values")
@@ -315,39 +369,21 @@ func createCert(cCtx *cli.Context) error {
 	}
 	fmt.Println(subAttrs)
 
-	// Use the default values for the key parameters (RSA, 2048 bits)
-	keyparams := x509util.KeyParams{}
-
-	// Create the self-signed CA certificate
-	privateKey, newCert, err := x509util.NewCAELSICertificateRaw(subAttrs, keyparams)
+	// Create the entity certificate, signed by the CA certificate
+	privateKey, newCert, err := x509util.NewELSICertificateRaw(
+		newCACert,
+		privateCAKey,
+		subAttrs,
+		keyparams)
 	if err != nil {
 		return err
 	}
 
 	// Save to a file in pkcs12 format, including the private key and the certificate
 	outputFileName := cCtx.String("output")
-	pass := cCtx.String("password")
+
 	err = filesigner.SaveCertificateToPkcs12File(outputFileName, privateKey, newCert, pass)
 	if err != nil {
-		return err
-	}
-
-	const pemFileName = "cacert_generated.pem"
-	pemFile, err := os.OpenFile(pemFileName, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
-	if err != nil {
-		return fmt.Errorf("failed to open %s for writing: %w", outputFileName, err)
-	}
-
-	block := &pem.Block{
-		Type:  "CERTIFICATE",
-		Bytes: newCert.Raw,
-	}
-
-	if err := pem.Encode(pemFile, block); err != nil {
-		return err
-	}
-
-	if err := pemFile.Close(); err != nil {
 		return err
 	}
 

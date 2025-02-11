@@ -144,7 +144,7 @@ func startIrisServer(issuerOrigin string, issuerQueryPath string, issuerUpdatePa
 
 	// Open the default platform browser to display the UI
 	go func() {
-		time.Sleep(2 * time.Second)
+		time.Sleep(1 * time.Second)
 		browser.OpenURL("http://localhost:8080/")
 	}()
 
