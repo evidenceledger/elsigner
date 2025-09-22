@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"runtime"
 	"runtime/debug"
 	"strings"
 	"time"
@@ -194,18 +193,20 @@ func main() {
 // sign is called when the program is invoked from the command line or clicking on it
 func sign(cCtx *cli.Context) error {
 	// The Windows certstore is only available on Windows (obviously!)
-	currentOS := runtime.GOOS
+	// currentOS := runtime.GOOS
 
-	if currentOS != "windows" {
-		fmt.Println("This program only works in Windows")
-		return nil
-	}
+	// if currentOS != "windows" {
+	// 	fmt.Println("This program only works in Windows")
+	// 	return nil
+	// }
 
-	issuerOrigin := cCtx.String("origin")
-	issuerQueryPath := cCtx.String("query")
-	issuerUpdatePath := cCtx.String("update")
+	// issuerOrigin := cCtx.String("origin")
+	// issuerQueryPath := cCtx.String("query")
+	// issuerUpdatePath := cCtx.String("update")
 
-	startIrisServer(issuerOrigin, issuerQueryPath, issuerUpdatePath)
+	tkwin()
+
+	// startIrisServer(issuerOrigin, issuerQueryPath, issuerUpdatePath)
 	return nil
 }
 
