@@ -18,7 +18,7 @@ import (
 	"github.com/pkg/browser"
 	"software.sslmate.com/src/go-pkcs12"
 
-	"github.com/evidenceledger/vcdemo/issuernew"
+	"github.com/evidenceledger/vcdemo/types"
 	"github.com/evidenceledger/vcdemo/vault/x509util"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/kataras/iris/v12"
@@ -144,7 +144,7 @@ func startIrisServer(issuerOrigin string, issuerQueryPath string, issuerUpdatePa
 
 	// Open the default platform browser to display the UI
 	go func() {
-		time.Sleep(2 * time.Second)
+		time.Sleep(1 * time.Second)
 		browser.OpenURL("http://localhost:8080/")
 	}()
 
@@ -290,7 +290,7 @@ func (s *server) displayCredentialDetails(ctx iris.Context) {
 	// We need to decode the payload so we can display it to the user.
 	// We do not need to verify signatures here.
 	raw := record["raw"].(string)
-	var learcred issuernew.LEARCredentialEmployeeJWTClaims
+	var learcred types.LEARCredentialEmployeeJWTClaims
 	parser := jwt.NewParser()
 	_, _, err = parser.ParseUnverified(raw, &learcred)
 	if err != nil {
@@ -328,17 +328,17 @@ func (s *server) signWithCertificate(ctx iris.Context) {
 	// Get the raw credential and parse it
 	raw := record["raw"].(string)
 	parser := jwt.NewParser()
-	token, _, err := parser.ParseUnverified(raw, &issuernew.LEARCredentialEmployeeJWTClaims{})
+	token, _, err := parser.ParseUnverified(raw, &types.LEARCredentialEmployeeJWTClaims{})
 	if err != nil {
 		renderPage(ctx, "error", iris.Map{"title": "Error parsing the credential", "description": "The format of the credential seems wrong.", "message": err.Error()})
 		return
 	}
 
 	// Sign the credential with the certificate selected previously
-	learCred := token.Claims.(*issuernew.LEARCredentialEmployeeJWTClaims)
+	learCred := token.Claims.(*types.LEARCredentialEmployeeJWTClaims)
 
 	// Sign the credential with the private key of the selected certificate
-	tok, err := issuernew.CreateLEARCredentialJWTtoken(learCred.LEARCredentialEmployee, tokensign.SigningMethodCert, s.tlsCertificate.PrivateKey)
+	tok, err := types.CreateLEARCredentialJWTtoken(learCred.LEARCredentialEmployee, tokensign.SigningMethodCert, s.tlsCertificate.PrivateKey)
 
 	if err != nil {
 		renderPage(ctx, "error", iris.Map{"title": "Error signing the credential", "description": "There has been an error signing the LEARCredential with the selected certificate.", "message": err.Error()})
